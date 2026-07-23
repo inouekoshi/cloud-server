@@ -1,0 +1,29 @@
+# 鈴鹿高専 高専祭2026「スズリーグ」用のデプロイ設定
+# Render の Blueprint 形式。 https://render.com/docs/blueprint-spec
+#
+# Render のダッシュボードで New > Blueprint を選び、このリポジトリを指定すると
+# ここに書かれた設定でサービスが作られる。
+services:
+  - type: web
+    name: suzuleague-cloud
+    runtime: node
+    plan: free
+    # 日本から最も近いリージョン。他は米国とドイツしかない
+    region: singapore
+    branch: master
+    buildCommand: npm ci
+    startCommand: npm start
+    # public/index.html を返すので 200 が返る
+    healthCheckPath: /
+    envVars:
+      # 1部屋あたりの人数上限。upstream の既定は 128 で、
+      # 観客がスマホから参加するイベントには足りない。
+      # 超過分はエラーも出さずに脱落するので余裕を持たせる
+      - key: MAX_CLIENTS
+        value: "300"
+      # Render はリバースプロキシ配下なので、これを立てないと
+      # すべての接続元IPがプロキシのIPに見えてログが役に立たない
+      - key: TRUST_PROXY
+        value: "true"
+      - key: NODE_VERSION
+        value: "22"

@@ -3,6 +3,16 @@ module.exports = {
   // on unix-like platforms, this can be the path to a unix socket
   port: process.env.PORT || 9080,
 
+  // Maximum number of clients allowed in a single room.
+  // Upstream hardcodes 128. That is not enough for an event where the audience
+  // joins from their phones, so it is configurable here.
+  // Note that clients over this limit fail *silently*: the WebSocket connects
+  // but the client never joins the room and never receives any variable update.
+  maxClients: Number(process.env.MAX_CLIENTS) || 128,
+
+  // Maximum number of variables allowed in a single room.
+  maxVariables: Number(process.env.MAX_VARIABLES) || 128,
+
   // the unix permissions to use for unix sockets
   // set to -1 to disable permission changing
   // make sure to use an octal (`0o`) instead of just a regular number

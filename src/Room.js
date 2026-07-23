@@ -1,3 +1,5 @@
+const config = require('./config');
+
 /**
  * @typedef {import('./Client')} Client
  */
@@ -41,11 +43,11 @@ class Room {
     /**
      * Maximum number of variables that can be within this room.
      */
-    this.maxVariables = 128;
+    this.maxVariables = config.maxVariables;
     /**
      * Maximum number of clients that can be connected to this room.
      */
-    this.maxClients = 128;
+    this.maxClients = config.maxClients;
   }
 
   /**
