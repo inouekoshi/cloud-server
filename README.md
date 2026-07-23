@@ -3,15 +3,14 @@
 > **このforkについて**
 >
 > 鈴鹿高専 高専祭2026 ステージイベント「スズリーグ」で使うためのfork。
-> 本家（[TurboWarp/cloud-server](https://github.com/TurboWarp/cloud-server)）からの変更は以下の3点のみ。
+> 本家（[TurboWarp/cloud-server](https://github.com/TurboWarp/cloud-server)）からの変更は以下の4点のみ。
 >
 > | 変更 | 理由 |
 > |---|---|
 > | 1部屋あたりの人数上限を環境変数 `MAX_CLIENTS` で変えられるようにした（`src/config.js`・`src/Room.js`） | 本家は128人固定。観客がスマホから参加するため足りない。**超過分はエラーが出ないまま脱落する**ので余裕が要る |
 > | 変数の数の上限も `MAX_VARIABLES` で変えられるようにした | 上と同じ箇所なのでついでに。実際は既定の128で足りている |
 > | `render.yaml` を追加 | Render の無料枠にそのままデプロイするため |
->
-> | `public/suzuleague.html` を追加 | 観客がスマホから参加する画面。cloud-server が `public/` を静的配信するので、**サーバを増やさずに観客ページを配れる**。このファイルは進行システム側で生成したものを置いている（直接編集しないこと） |
+> | `public/suzuleague.html` を追加 | 観客がスマホから参加する画面。cloud-server が `public/` を静的配信するので、**サーバを増やさずに観客ページを配れる**。進行システム側で生成したものを置いている（**直接編集しないこと**） |
 >
 > 観客ページの生成:
 >
