@@ -11,6 +11,14 @@
 > | 変数の数の上限も `MAX_VARIABLES` で変えられるようにした | 上と同じ箇所なのでついでに。実際は既定の128で足りている |
 > | `render.yaml` を追加 | Render の無料枠にそのままデプロイするため |
 >
+> | `public/suzuleague.html` を追加 | 観客がスマホから参加する画面。cloud-server が `public/` を静的配信するので、**サーバを増やさずに観客ページを配れる**。このファイルは進行システム側で生成したものを置いている（直接編集しないこと） |
+>
+> 観客ページの生成:
+>
+> ```
+> uv run python -m suzuleague.audience -o ../cloud-server/public/suzuleague.html
+> ```
+>
 > 進行システム本体は
 > [suzuka-kosen-festa/snctfes2026-suzuleague](https://github.com/suzuka-kosen-festa/snctfes2026-suzuleague)。
 > 以下は本家のREADME。
