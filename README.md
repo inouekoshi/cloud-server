@@ -3,23 +3,31 @@
 > **このforkについて**
 >
 > 鈴鹿高専 高専祭2026 ステージイベント「スズリーグ」で使うためのfork。
-> 本家（[TurboWarp/cloud-server](https://github.com/TurboWarp/cloud-server)）からの変更は以下の4点のみ。
+> 本家（[TurboWarp/cloud-server](https://github.com/TurboWarp/cloud-server)）からの変更は以下のとおり。
+> **クラウド変数のプロトコルには手を入れていない。**
 >
 > | 変更 | 理由 |
 > |---|---|
 > | 1部屋あたりの人数上限を環境変数 `MAX_CLIENTS` で変えられるようにした（`src/config.js`・`src/Room.js`） | 本家は128人固定。観客がスマホから参加するため足りない。**超過分はエラーが出ないまま脱落する**ので余裕が要る |
 > | 変数の数の上限も `MAX_VARIABLES` で変えられるようにした | 上と同じ箇所なのでついでに。実際は既定の128で足りている |
 > | `render.yaml` を追加 | Render の無料枠にそのままデプロイするため |
-> | `public/suzuleague.html` を追加 | 観客がスマホから参加する画面。cloud-server が `public/` を静的配信するので、**サーバを増やさずに観客ページを配れる**。進行システム側で生成したものを置いている（**直接編集しないこと**） |
+> | `public/` に3つの画面を追加（`suzuleague.html` 観客ページ・`host.html` 司会者画面・`player.html` 出演者の回答画面） | 全員が自分のスマホで見る方式のため。**進行システム側で書き出したものを置いている（直接編集しないこと）** |
+> | 司会者画面・出演者の回答の中継API（`src/hostApi.js`。`/api/host/*`・`/api/player/*`） | 司会や出演者のスマホから裏方PCへ直接つながず、このサーバを郵便受けにして操作と回答を届けるため。環境変数 **`HOST_TOKEN`**（合言葉）が必須で、未設定ならAPIは無効 |
+> | 観客ランキングのAPI（`src/rankingApi.js`。`/api/score`・`/api/ranking`） | 観客の成績（誤差の合計）を集めて順位を返すため |
 >
-> 観客ページの生成:
+> 画面の書き出しと、本番で配信中の画面との照合（進行システム側で実行）:
 >
 > ```
-> uv run python -m suzuleague.audience -o ../cloud-server/public/suzuleague.html
+> uv run python -m suzuleague.publish --room-id 1364239598          # このリポジトリの public/ に書き出す
+> uv run python -m suzuleague.publish --room-id 1364239598 --check  # 本番と照合
 > ```
+>
+> **master に push すると Render が本番に自動デプロイする**（約90秒）。API の仕様は進行システムの
+> [docs/protocol.md](https://github.com/suzuka-kosen-festa/2026-suzuleague/blob/main/docs/protocol.md#https-apiスマホの画面と裏方pc) を参照。
 >
 > 進行システム本体は
-> [suzuka-kosen-festa/snctfes2026-suzuleague](https://github.com/suzuka-kosen-festa/snctfes2026-suzuleague)。
+> [suzuka-kosen-festa/2026-suzuleague](https://github.com/suzuka-kosen-festa/2026-suzuleague)。
+> デモ後にそちらへまとめる予定（suzuleague #45）。
 > 以下は本家のREADME。
 
 A cloud data server for Scratch 3. Used by [forkphorus](https://forkphorus.github.io/) and [TurboWarp](https://turbowarp.org/).
