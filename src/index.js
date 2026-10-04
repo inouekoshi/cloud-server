@@ -6,6 +6,10 @@ const serveStatic = require('serve-static');
 const logger = require('./logger');
 const config = require('./config');
 const wss = require('./server');
+const { createHostApi } = require('./hostApi');
+
+// Suzuleague: relay between the MC's phone and the backstage PC (see hostApi.js)
+const hostApi = createHostApi({ token: config.hostToken });
 
 // We serve static files over HTTP
 const serve = serveStatic('public');
@@ -14,6 +18,9 @@ const server = http.createServer(function handler(req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'interest-cohort=()');
+  if (hostApi.handle(req, res)) {
+    return;
+  }
   // @ts-ignore
   serve(req, res, finalhandler(req, res));
 });

@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#111827">
+<title>スズリーグ 司会者画面</title>
+<!--
+  司会者画面。司会が手元のスマホで進行を操作する。
+  Render（cloud-server の public/host.html）からも、裏方PCの予備サーバ
+  （uv run suzuleague --web → http://localhost:8000/host）からも同じファイルを配信する。
+  APIは相対パスで呼ぶので、どちらから開いても同じ動きになる。
+  元ファイルは suzuleague リポジトリの src/suzuleague/host.html。
+-->
+<style>
+  :root {
+    --bg: #f3f4f6;
+    --card: #ffffff;
+    --text: #111827;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --ok: #15803d;
+    --warn: #b45309;
+    --ng: #b91c1c;
+    --balloon: #db2777;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1020;
+      --card: #161c2e;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --line: #263049;
+      --accent: #3b82f6;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --ng: #f87171;
+      --balloon: #f472b6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    padding: 0 16px calc(150px + env(safe-area-inset-bottom));
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 12px 0 8px;
+  }
+  header h1 { font-size: 15px; margin: 0; color: var(--muted); font-weight: 600; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; padding: 4px 10px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line);
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill[data-kind="ok"] .dot { background: var(--ok); }
+  .pill[data-kind="warn"] .dot { background: var(--warn); }
+  .pill[data-kind="ng"] .dot { background: var(--ng); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin: 10px 0;
+  }
+  .label { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  .state { font-size: 26px; font-weight: 800; margin: 2px 0 0; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .team-name { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+  .balloons { text-align: right; white-space: nowrap; }
+  .balloons b { font-size: 34px; color: var(--balloon); font-variant-numeric: tabular-nums; }
+  .tag {
+    display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px;
+    border-radius: 6px; background: var(--warn); color: #fff; margin-left: 6px;
+  }
+  .question { font-size: 18px; font-weight: 700; margin: 6px 0; overflow-wrap: anywhere; }
+  .source { font-size: 12px; color: var(--muted); }
+  .secret {
+    margin-top: 10px; width: 100%; min-height: 44px; border-radius: 10px;
+    border: 1px dashed var(--line); background: transparent; color: var(--text);
+    font-size: 15px;
+  }
+  .secret b { font-size: 22px; }
+
+  .answer-now { font-size: 15px; }
+  .answer-now b { font-size: 30px; font-variant-numeric: tabular-nums; }
+  .answer-now .waiting { color: var(--warn); font-weight: 700; }
+  .proxy { display: flex; gap: 8px; margin-top: 10px; }
+  .proxy input {
+    flex: 1; min-width: 0; min-height: 48px; font-size: 22px; text-align: center;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  .proxy button {
+    min-height: 48px; padding: 0 18px; font-size: 16px; font-weight: 700;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+
+  .result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 6px; }
+  .result div { background: var(--bg); border-radius: 10px; padding: 8px 4px; }
+  .result b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+
+  .winner { text-align: center; }
+  .winner .name { font-size: 24px; font-weight: 800; margin: 4px 0; overflow-wrap: anywhere; }
+  .winner .prize { font-size: 15px; }
+
+  details.card summary { cursor: pointer; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  td { padding: 6px 2px; border-top: 1px solid var(--line); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.current td { font-weight: 700; }
+
+  .dock {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--bg); border-top: 1px solid var(--line);
+  }
+  .toast { font-size: 14px; min-height: 21px; margin-bottom: 6px; text-align: center; }
+  .toast[data-kind="ok"] { color: var(--ok); }
+  .toast[data-kind="ng"] { color: var(--ng); font-weight: 700; }
+  .next {
+    width: 100%; min-height: 72px; border: 0; border-radius: 16px;
+    background: var(--accent); color: var(--accent-text);
+    font-size: 21px; font-weight: 800; touch-action: manipulation;
+  }
+  .next small { display: block; font-size: 12px; font-weight: 600; opacity: .85; }
+  .next:disabled { opacity: .4; }
+
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .overlay .card { width: 100%; max-width: 420px; }
+  .overlay input {
+    width: 100%; min-height: 48px; font-size: 18px; padding: 0 12px; margin: 10px 0;
+    border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  .overlay button { width: 100%; min-height: 48px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-size: 17px; font-weight: 700; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>スズリーグ 司会者画面</h1>
+  <span class="pill" id="conn" data-kind="warn"><span class="dot"></span><span id="conn-text">接続中…</span></span>
+</header>
+
+<main>
+  <section class="card">
+    <div class="label">いまの進行</div>
+    <div class="state" id="state">—</div>
+    <div class="row" id="team-row" style="margin-top:8px">
+      <div>
+        <div class="team-name" id="team-name">—</div>
+        <div class="muted" id="round"></div>
+      </div>
+      <div class="balloons"><span class="label">残りバルーン</span><br><b id="balloons">—</b></div>
+    </div>
+  </section>
+
+  <section class="card hidden" id="question-card">
+    <div class="label" id="question-label">問題</div>
+    <div class="question" id="question"></div>
+    <div class="source" id="source"></div>
+    <button type="button" class="secret" id="reveal-btn">正解を見る（押している間だけ表示）</button>
+  </section>
+
+  <section class="card hidden" id="answer-card">
+    <div class="label">出演者の回答</div>
+    <div class="answer-now" id="answer-now"></div>
+    <div class="proxy">
+      <input id="proxy-input" type="number" inputmode="numeric" min="0" max="100" placeholder="0〜100">
+      <button type="button" id="proxy-btn">代理入力</button>
+    </div>
+    <div class="source" style="margin-top:6px">出演者のスマホから届かないときだけ使う</div>
+  </section>
+
+  <section class="card hidden" id="result-card">
+    <div class="label" id="result-label">結果</div>
+    <div class="result">
+      <div><span class="label">回答</span><b id="r-answer"></b></div>
+      <div><span class="label">正解</span><b id="r-correct"></b></div>
+      <div><span class="label">割れた数</span><b id="r-damage"></b></div>
+    </div>
+  </section>
+
+  <section class="card winner hidden" id="winner-card">
+    <div class="label">優勝</div>
+    <div class="name" id="winner-name"></div>
+    <div class="prize" id="winner-prize"></div>
+  </section>
+
+  <details class="card" id="teams-card">
+    <summary>全チームの状況</summary>
+    <table><tbody id="teams"></tbody></table>
+  </details>
+</main>
+
+<div class="dock">
+  <div class="toast" id="toast"></div>
+  <button type="button" class="next" id="next-btn" disabled>次へ<small id="next-sub">読み込み中…</small></button>
+</div>
+
+<div class="overlay hidden" id="token-overlay">
+  <form class="card" id="token-form">
+    <div class="state" style="font-size:20px">合言葉を入力</div>
+    <div class="muted">司会者画面を使うには合言葉が必要です。開発担当から聞いてください。</div>
+    <input id="token-input" type="password" autocomplete="current-password" required>
+    <button type="submit">はじめる</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var POLL_MS = 1000;
+  var STALE_SEC = 6;          // これ以上PCから更新がなければ「応答なし」
+  var PENDING_TIMEOUT_MS = 8000;
+  var TOKEN_KEY = "suzuleague-host-token";
+
+  var el = function (id) { return document.getElementById(id); };
+  var current = null;         // 最後に受け取った状態
+  var pending = null;         // 送信中の操作 {seq, at}
+  var lastShownSeq = null;
+  var token = "";
+
+  try { token = localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { /* 保存できない環境 */ }
+
+  function headers(json) {
+    var h = {};
+    if (token) h["X-Host-Token"] = token;
+    if (json) h["Content-Type"] = "application/json";
+    return h;
+  }
+
+  function setConn(kind, text) {
+    el("conn").setAttribute("data-kind", kind);
+    el("conn-text").textContent = text;
+  }
+
+  function toast(kind, text) {
+    var t = el("toast");
+    t.setAttribute("data-kind", kind || "");
+    t.textContent = text || "";
+  }
+
+  function askToken(message) {
+    el("token-overlay").classList.remove("hidden");
+    if (message) toast("ng", message);
+    el("token-input").focus();
+  }
+
+  el("token-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    token = el("token-input").value.trim();
+    try { localStorage.setItem(TOKEN_KEY, token); } catch (e) { /* 保存できない環境 */ }
+    el("token-overlay").classList.add("hidden");
+    toast("", "");
+    poll();
+  });
+
+  // ---- 状態の取得 ------------------------------------------------------
+
+  function poll() {
+    fetch("api/host/state", { headers: headers(false), cache: "no-store" })
+      .then(function (res) {
+        if (res.status === 401) { askToken(token ? "合言葉が違います" : ""); throw null; }
+        if (res.status === 503) { setConn("ng", "サーバの設定が未完了"); throw null; }
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data.state) {
+          setConn("ng", "PCがまだつながっていません");
+          render(null);
+          return;
+        }
+        if (data.age > STALE_SEC) setConn("ng", "PCの応答なし（" + Math.round(data.age) + "秒）");
+        else setConn("ok", "PCと接続中");
+        render(data.state);
+      })
+      .catch(function (err) {
+        if (err) setConn("ng", "サーバにつながりません");
+      });
+  }
+
+  // ---- 描画 ------------------------------------------------------------
+
+  function show(id, visible) { el(id).classList.toggle("hidden", !visible); }
+
+  function render(s) {
+    current = s;
+    if (!s) {
+      el("state").textContent = "—";
+      updateNext();
+      return;
+    }
+
+    el("state").textContent = s.state_label;
+
+    if (s.team) {
+      el("team-name").textContent = teamLabel(s.team);
+      el("balloons").textContent = s.team.balloons;
+      el("round").textContent = s.round ? "第" + s.round + "問 / 全" + s.rounds_per_team + "問" : "";
+      if (s.team.failed) el("round").innerHTML += '<span class="tag">ゲームオーバー</span>';
+    } else {
+      el("team-name").textContent = s.finished ? "全チーム終了" : "開始前";
+      el("balloons").textContent = "—";
+      el("round").textContent = "";
+    }
+
+    var q = s.question;
+    show("question-card", !!q && !s.finished);
+    if (q) {
+      el("question-label").textContent = "第" + s.round + "問" + (s.exhibition ? "（エキシビション・採点なし）" : "");
+      el("question").textContent = q.text;
+      el("source").textContent = q.source ? "出典: " + q.source : "";
+      el("reveal-btn").setAttribute("data-correct", q.correct);
+    }
+
+    show("answer-card", s.accepting_answer);
+    if (s.accepting_answer) {
+      el("answer-now").innerHTML = s.answer === null
+        ? '<span class="waiting">回答を待っています</span>'
+        : "届いた回答 <b>" + s.answer + "%</b>";
+    }
+
+    show("result-card", !!s.result);
+    if (s.result) {
+      el("result-label").textContent = s.result.exhibition ? "結果（エキシビション・採点なし）" : "結果";
+      el("r-answer").textContent = s.result.answer + "%";
+      el("r-correct").textContent = s.result.correct + "%";
+      el("r-damage").textContent = s.result.perfect ? "0 ★" : s.result.damage;
+    }
+
+    show("winner-card", s.finished);
+    if (s.finished) {
+      if (s.winner) {
+        el("winner-name").textContent = teamLabel(s.winner);
+        el("winner-prize").textContent = "残りバルーン " + s.winner.balloons + " ／ 景品：お菓子の詰め合わせ";
+      } else {
+        el("winner-name").textContent = "優勝チームなし";
+        el("winner-prize").textContent = "クリアしたチームがありませんでした";
+      }
+    }
+
+    renderTeams(s);
+    handleCommandResult(s.last_command);
+    updateNext();
+  }
+
+  function renderTeams(s) {
+    var rows = s.teams.map(function (t) {
+      var cur = s.team && s.team.number === t.number && !s.finished;
+      return "<tr" + (cur ? ' class="current"' : "") + "><td>" + t.number + ". " + escapeHtml(t.name) +
+        '</td><td class="num">' + t.balloons + '個</td><td class="num">' + t.finished_rounds + "/5</td><td>" + t.status + "</td></tr>";
+    });
+    el("teams").innerHTML = rows.join("");
+  }
+
+  // チーム名が未設定（既定の「チーム1」など）なら番号を重ねて出さない
+  function teamLabel(t) {
+    return t.name === "チーム" + t.number ? t.name : "チーム" + t.number + "　" + t.name;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function updateNext() {
+    var btn = el("next-btn");
+    var sub = el("next-sub");
+    if (!current) {
+      btn.disabled = true; sub.textContent = "PCとつながるのを待っています"; return;
+    }
+    if (current.finished) {
+      btn.disabled = true; sub.textContent = "ゲームは終了しました"; return;
+    }
+    if (pending) {
+      btn.disabled = true; sub.textContent = "送信中…"; return;
+    }
+    if (current.needs_answer) {
+      btn.disabled = true; sub.textContent = "回答が届くと押せます"; return;
+    }
+    btn.disabled = false;
+    sub.textContent = current.next_action || "";
+  }
+
+  // ---- 操作の送信 ------------------------------------------------------
+
+  function send(command) {
+    if (pending) return;
+    pending = { seq: null, at: Date.now() };
+    updateNext();
+    fetch("api/host/command", {
+      method: "POST", headers: headers(true), body: JSON.stringify(command)
+    })
+      .then(function (res) {
+        if (res.status === 401) { askToken("合言葉が違います"); throw null; }
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (data.result) {            // 裏方PCの予備サーバはその場で実行して結果を返す
+          pending = null;
+          showResult(data.result);
+          poll();
+        } else {                      // Render は預かるだけ。結果は状態の last_command で届く
+          pending.seq = data.seq;
+        }
+      })
+      .catch(function (err) {
+        pending = null;
+        if (err) toast("ng", "送信できませんでした。もう一度押してください");
+        updateNext();
+      });
+  }
+
+  function handleCommandResult(cmd) {
+    if (pending && pending.seq !== null && cmd && cmd.seq >= pending.seq) {
+      pending = null;
+      showResult(cmd);
+    }
+  }
+
+  function showResult(cmd) {
+    if (!cmd || cmd.seq === lastShownSeq) return;
+    lastShownSeq = cmd.seq;
+    toast(cmd.ok ? "ok" : "ng", cmd.message);
+  }
+
+  setInterval(function () {
+    if (pending && Date.now() - pending.at > PENDING_TIMEOUT_MS) {
+      pending = null;
+      toast("ng", "PCに届いていません。PCの接続を確認してください");
+      updateNext();
+    }
+  }, 1000);
+
+  el("next-btn").addEventListener("click", function () {
+    if (!current || current.finished) return;
+    // 表示中のステートを添える。通信の遅れで二重に届いても2段階進まない
+    send({ type: "next", expect_state: current.state });
+  });
+
+  el("proxy-btn").addEventListener("click", function () {
+    var v = el("proxy-input").value.trim();
+    if (!/^\d{1,3}$/.test(v) || Number(v) > 100) {
+      toast("ng", "0〜100の整数を入力してください");
+      return;
+    }
+    send({ type: "answer", value: Number(v) });
+    el("proxy-input").value = "";
+  });
+
+  // 正解は押している間だけ表示する（周りから見えないように）
+  var revealBtn = el("reveal-btn");
+  var revealDefault = revealBtn.innerHTML;
+  function revealOn(ev) {
+    ev.preventDefault();
+    revealBtn.innerHTML = "正解 <b>" + revealBtn.getAttribute("data-correct") + "%</b>";
+  }
+  function revealOff() { revealBtn.innerHTML = revealDefault; }
+  revealBtn.addEventListener("pointerdown", revealOn);
+  ["pointerup", "pointerleave", "pointercancel"].forEach(function (t) {
+    revealBtn.addEventListener(t, revealOff);
+  });
+  revealBtn.addEventListener("contextmenu", function (ev) { ev.preventDefault(); });
+
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>
+</body>
+</html>
