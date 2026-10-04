@@ -199,6 +199,8 @@
   <div class="big" id="f-winner"></div>
   <div id="f-prize"></div>
   <table><tbody id="f-teams"></tbody></table>
+  <div class="label hidden" id="f-audience-title" style="margin-top:16px">観客ランキング（誤差の合計が少ない順）</div>
+  <table><tbody id="f-audience"></tbody></table>
 </section>
 
 <script>
@@ -394,6 +396,23 @@
         '</td><td class="num">' + t.balloons + "個</td><td>" + t.status + "</td></tr>";
     }).join("");
     show("view-final");
+    loadAudienceRanking();
+  }
+
+  var audienceLoaded = false;
+  function loadAudienceRanking() {
+    if (audienceLoaded) return;
+    audienceLoaded = true;
+    fetch("api/ranking?limit=5", { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (r) {
+        if (!r || !r.top.length) return;
+        el("f-audience").innerHTML = r.top.map(function (t) {
+          return "<tr><td>" + t.rank + "位</td><td>" + escapeHtml(t.name) + '</td><td class="num">誤差 ' + t.total + "</td></tr>";
+        }).join("");
+        el("f-audience-title").classList.remove("hidden");
+      })
+      .catch(function () { audienceLoaded = false; });
   }
 
   // ---- 入力と送信 ------------------------------------------------------

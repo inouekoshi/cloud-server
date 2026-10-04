@@ -215,6 +215,31 @@ describe('HTTP API', () => {
     expect((await res.json()).error).toBeTruthy();
   });
 
+  test('audience ranking round trip', async () => {
+    let res = await call('POST', '/api/score', {
+      token: '', body: { id: 'viewer-abcdefgh', name: 'すずか', error_sum: 12, answered: 1, last_question: 1 },
+    });
+    expect(res.status).toBe(200);
+    res = await call('POST', '/api/score', { token: '', body: { id: 'x', name: 'a', error_sum: 0, answered: 0, last_question: 0 } });
+    expect(res.status).toBe(400);
+    res = await call('GET', '/api/ranking?id=viewer-abcdefgh', { token: '' });
+    const ranking = await res.json();
+    expect(ranking.me.rank).toBe(1);
+    expect(ranking.top[0].name).toBe('すずか');
+    expect(JSON.stringify(ranking)).not.toContain('viewer-abcdefgh'); // ids are not exposed publicly
+
+    // the MC can hide a name and reset the ranking
+    expect((await call('GET', '/api/host/ranking', { token: '' })).status).toBe(401);
+    res = await call('GET', '/api/host/ranking');
+    expect((await res.json()).entries[0]).toEqual({ id: 'viewer-abcdefgh', name: 'すずか', hidden: false });
+    await call('POST', '/api/host/ranking/hide', { body: { id: 'viewer-abcdefgh', hidden: true } });
+    res = await call('GET', '/api/ranking', { token: '' });
+    expect((await res.json()).top).toEqual([]);
+    await call('POST', '/api/host/ranking/reset', { body: {} });
+    res = await call('GET', '/api/ranking', { token: '' });
+    expect((await res.json()).participants).toBe(0);
+  });
+
   test('unknown API paths get 404', async () => {
     expect((await call('GET', '/api/host/nothing')).status).toBe(404);
   });

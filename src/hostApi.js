@@ -28,6 +28,7 @@
 // combinations cannot be tried within the event.
 
 const crypto = require('crypto');
+const { RankingStore, RankingError } = require('./rankingApi');
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_COMMANDS = 100;
@@ -259,9 +260,21 @@ function readJson(req) {
 }
 
 /**
- * @param {{token: string | undefined, store?: HostRelayStore}} options
+ * Number of questions revealed so far, as reported by the backstage PC.
+ * @param {HostRelayStore} store
  */
-function createHostApi({ token, store = new HostRelayStore() }) {
+function revealedFromHost(store) {
+  const state = /** @type {any} */ (store.state);
+  const revealed = state && state.player && state.player.revealed;
+  return Number.isInteger(revealed) ? revealed : -1;
+}
+
+/**
+ * @param {{token: string | undefined, store?: HostRelayStore, ranking?: RankingStore}} options
+ */
+function createHostApi({ token, store = new HostRelayStore(), ranking = undefined }) {
+  const rankingStore = ranking || new RankingStore(() => revealedFromHost(store));
+
   /**
    * Handle a request if it belongs to this API.
    * @param {import('http').IncomingMessage} req
@@ -270,6 +283,10 @@ function createHostApi({ token, store = new HostRelayStore() }) {
    */
   function handle(req, res) {
     const url = new URL(req.url || '/', 'http://localhost');
+    if (url.pathname === '/api/score' || url.pathname === '/api/ranking') {
+      handleRanking(req, res, url);
+      return true;
+    }
     if (url.pathname.startsWith('/api/player/')) {
       handlePlayer(req, res, url.pathname);
       return true;
@@ -292,6 +309,29 @@ function createHostApi({ token, store = new HostRelayStore() }) {
     } else if (route === 'GET /api/host/command') {
       const after = Number(url.searchParams.get('after') || 0);
       sendJson(res, 200, store.commandsAfter(Number.isFinite(after) ? after : 0));
+    } else if (route === 'GET /api/host/ranking') {
+      // for the MC: includes ids and hidden entries so that a bad name can be hidden
+      const all = rankingStore.ranking(null, 1000);
+      sendJson(res, 200, {
+        ...all,
+        entries: Array.from(rankingStore.players.entries()).map(([id, p]) => ({
+          id, name: p.name, hidden: rankingStore.hidden.has(id),
+        })),
+      });
+    } else if (route === 'POST /api/host/ranking/hide') {
+      readJson(req)
+        .then((body) => {
+          const { id, hidden } = /** @type {any} */ (body || {});
+          if (typeof id !== 'string' || typeof hidden !== 'boolean') throw new Error('invalid request');
+          if (hidden) rankingStore.hidden.add(id);
+          else rankingStore.hidden.delete(id);
+          sendJson(res, 200, { ok: true });
+        })
+        .catch((e) => sendJson(res, 400, { error: String(e && e.message || e) }));
+    } else if (route === 'POST /api/host/ranking/reset') {
+      rankingStore.players.clear();
+      rankingStore.hidden.clear();
+      sendJson(res, 200, { ok: true });
     } else if (route === 'POST /api/host/command' || route === 'POST /api/host/state') {
       readJson(req)
         .then((body) => {
@@ -338,7 +378,33 @@ function createHostApi({ token, store = new HostRelayStore() }) {
     }
   }
 
-  return { handle, store };
+  /**
+   * Public endpoints for the audience ranking.
+   * @param {import('http').IncomingMessage} req
+   * @param {import('http').ServerResponse} res
+   * @param {URL} url
+   */
+  function handleRanking(req, res, url) {
+    const route = `${req.method} ${url.pathname}`;
+    if (route === 'GET /api/ranking') {
+      const limit = Math.min(10, Math.max(1, Number(url.searchParams.get('limit')) || 5));
+      sendJson(res, 200, rankingStore.ranking(url.searchParams.get('id'), limit));
+    } else if (route === 'POST /api/score') {
+      readJson(req)
+        .then((body) => {
+          rankingStore.submit(body);
+          sendJson(res, 200, { ok: true });
+        })
+        .catch((e) => {
+          if (e instanceof RankingError) sendJson(res, e.status, { error: e.message });
+          else sendJson(res, 400, { error: '送信の形式が正しくありません' });
+        });
+    } else {
+      sendJson(res, 405, { error: 'method not allowed' });
+    }
+  }
+
+  return { handle, store, ranking: rankingStore };
 }
 
 module.exports = {

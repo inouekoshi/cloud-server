@@ -307,6 +307,42 @@
     text-align: center;
   }
 
+  /* ---- ニックネーム・順位・全体結果 ---- */
+
+  .join {
+    margin-top: 1rem;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    padding: 0.9rem 1rem;
+  }
+  .join .k { font-size: 0.85rem; color: var(--ink-soft); }
+  .join form { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  .join input {
+    flex: 1; min-width: 0; font: inherit; font-size: 1rem; padding: 0.6rem 0.75rem;
+    border-radius: 0.5rem; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  }
+  .join .skip { background: none; border: 0; color: var(--ink-faint); font-size: 0.78rem; padding: 0.4rem 0; text-decoration: underline; }
+  .join .err { color: var(--accent); font-size: 0.8rem; min-height: 1.2em; }
+
+  .stage-row .v { color: var(--amber); }
+
+  .rank {
+    text-align: center;
+    margin-top: 0.75rem;
+    font-size: 1rem;
+  }
+  .rank b { font-family: var(--f-num); font-size: 1.6rem; color: var(--amber); }
+
+  .board { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.92rem; }
+  .board td { padding: 0.55rem 0.25rem; border-top: 1px solid var(--line); }
+  .board td.num { text-align: right; font-family: var(--f-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .board tr.win td { color: var(--amber); font-weight: 700; }
+  .board-title { font-size: 0.8rem; color: var(--ink-soft); margin-top: 1.25rem; }
+  .winner { text-align: center; }
+  .winner .name { font-size: 1.4rem; font-weight: 700; margin: 0.25rem 0; overflow-wrap: anywhere; }
+  .winner .prize { color: var(--ink-soft); }
+
   .hidden { display: none !important; }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -329,6 +365,16 @@
     <div class="team" id="team-label">開始前</div>
   </div>
   <div class="value" id="my-balloons">100</div>
+</div>
+
+<div class="join hidden" id="join">
+  <div class="k">ランキングに参加するニックネーム（10文字まで）</div>
+  <form id="join-form">
+    <input id="join-name" maxlength="10" autocomplete="nickname" enterkeyhint="done" placeholder="例：すずか">
+    <button type="submit">参加</button>
+  </form>
+  <div class="err" id="join-err"></div>
+  <button type="button" class="skip" id="join-skip">名前を出さずに参加する</button>
 </div>
 
 <main id="main">
@@ -374,6 +420,9 @@
       <div class="result-row is-damage">
         <span class="k">割れたバルーン</span><span class="v" id="r-damage">—</span>
       </div>
+      <div class="result-row stage-row hidden" id="r-stage-row">
+        <span class="k">ステージの回答</span><span class="v" id="r-stage">—</span>
+      </div>
       <div class="verdict" id="r-verdict"></div>
     </div>
   </div>
@@ -382,13 +431,27 @@
     <div class="idle">
       <div class="big" id="m-title">—</div>
       <div id="m-body"></div>
+      <div class="rank hidden" id="m-rank"></div>
     </div>
+  </div>
+
+  <div class="hidden" id="view-final">
+    <div class="winner">
+      <div class="stage-label">優勝</div>
+      <div class="name" id="f-winner">—</div>
+      <div class="prize" id="f-prize"></div>
+    </div>
+    <div class="rank hidden" id="f-rank"></div>
+    <div class="board-title">チームの順位</div>
+    <table class="board"><tbody id="f-teams"></tbody></table>
+    <div class="board-title hidden" id="f-audience-title">観客ランキング（誤差の合計が少ない順）</div>
+    <table class="board"><tbody id="f-audience"></tbody></table>
   </div>
 </main>
 
 <footer>
   鈴鹿高専 高専祭2026 ステージイベント「スズリーグ」<br>
-  回答はこの端末の中だけで採点しています。送信はしていません。
+  回答はこの端末の中で採点しています。ランキングのために、ニックネームと成績（誤差の合計）だけを送信します。
 </footer>
 
 <script>
@@ -430,17 +493,28 @@
   };
 
   var el = function (id) { return document.getElementById(id); };
-  var views = ["view-idle", "view-question", "view-answer", "view-reveal", "view-message"];
+  var views = ["view-idle", "view-question", "view-answer", "view-reveal", "view-message", "view-final"];
+  var MISSED_PENALTY = 50;   // 観客ランキングで未回答の問題に数える誤差（cloud-server と同じ）
 
   var state = {
     vars: {},          // 受信したP2S_*の生値
     answer: 50,        // スライダーの現在値
     locked: null,      // 決定した回答（未決定はnull）
+    lockedQid: null,   // locked がどの問題への回答か
     balloons: INITIAL_BALLOONS,
     team: 0,
-    scoredSeq: null,   // 採点済みのP2S_SEQ（二重採点を防ぐ）
-    lastState: null
+    scoredQid: null    // チーム内のバルーンを減らし済みの問題（二重に減らさない）
   };
+
+  // 観客ランキング用。リロードしても消えないよう localStorage に置く
+  var viewer = { id: null, name: null };
+  var score = { errorSum: 0, answered: 0, lastQuestion: 0, scored: {} };
+  var stageFetchedFor = null;  // ステージの回答を取りに行った問題
+
+  // いまの問題に対して決定した回答（ほかの問題のものは無効）
+  function myAnswer(qid) {
+    return state.lockedQid === qid ? state.locked : null;
+  }
 
   // ---- 表示の切り替え ------------------------------------------------
 
@@ -503,9 +577,11 @@
       state.team = team;
       state.balloons = INITIAL_BALLOONS;
       state.locked = null;
+      state.lockedQid = null;
     }
 
     renderBalloons();
+    if (st !== S.TEAM_RESULT) el("m-rank").classList.add("hidden");
 
     if (st === null) { show("view-idle"); return; }
 
@@ -522,10 +598,14 @@
         el("a-meta").textContent = metaLabel() +
           (st === S.EXHIBITION_ANSWERING ? " ・ エキシビション" : "");
         el("a-text").textContent = questionText(qid);
-        if (state.locked === null) {
+        if (myAnswer(qid) === null) {
           el("lock-btn").disabled = false;
           el("lock-btn").textContent = "この数字で決定";
           el("a-hint").textContent = "スライダーか＋−ボタンで数字を合わせてください。";
+        } else {
+          el("lock-btn").disabled = true;
+          el("lock-btn").textContent = myAnswer(qid) + "% で決定しました";
+          el("a-hint").textContent = "正解発表をお待ちください。決定後の変更はできません。";
         }
         show("view-answer");
         break;
@@ -547,12 +627,11 @@
           : "あなたのバルーンは尽きました";
         el("m-body").textContent = "ステージの結果発表をご覧ください。";
         show("view-message");
+        loadMyRank("m-rank");
         break;
 
       case S.FINAL_RESULT:
-        el("m-title").textContent = "全チーム終了！";
-        el("m-body").textContent = "ご参加ありがとうございました。表彰式をお楽しみください。";
-        show("view-message");
+        renderFinal();
         break;
 
       default:
@@ -562,7 +641,6 @@
 
   function renderReveal(qid) {
     var correct = num("P2S_CORRECT");
-    var seq = num("P2S_SEQ");
 
     // 正解が未公開（-1）のあいだは待機表示のまま
     if (correct === null || correct < 0) {
@@ -572,18 +650,22 @@
       return;
     }
 
-    if (state.locked === null) {
+    var mine = myAnswer(qid);
+    recordScore(qid, correct, mine);
+    loadStageAnswer(qid);
+
+    if (mine === null) {
       el("m-title").textContent = "正解は " + correct + "%";
       el("m-body").textContent = "今回は回答が間に合いませんでした。次の問題からどうぞ。";
       show("view-message");
       return;
     }
 
-    var damage = Math.abs(correct - state.locked);
+    var damage = Math.abs(correct - mine);
 
-    // 同じラウンドで二重に減点しないよう、採点は1回だけ
-    if (state.scoredSeq !== seq) {
-      state.scoredSeq = seq;
+    // 正解発表とラウンド結果の2回描画されるので、バルーンを減らすのは問題ごとに1回だけ
+    if (state.scoredQid !== qid) {
+      state.scoredQid = qid;
       state.balloons = Math.max(0, state.balloons - damage);
       renderBalloons();
       save();
@@ -591,7 +673,7 @@
 
     el("r-text").textContent = questionText(qid);
     el("r-correct").textContent = correct + "%";
-    el("r-mine").textContent = state.locked + "%";
+    el("r-mine").textContent = mine + "%";
     el("r-damage").textContent = damage === 0 ? "0（無傷！）" : "−" + damage;
     el("r-box").querySelector(".is-perfect") &&
       el("r-box").querySelector(".is-perfect").classList.remove("is-perfect");
@@ -609,6 +691,7 @@
 
   function lockAnswer() {
     state.locked = state.answer;
+    state.lockedQid = num("P2S_QID");
     el("lock-btn").disabled = true;
     el("lock-btn").textContent = state.locked + "% で決定しました";
     el("a-hint").textContent = "正解発表をお待ちください。決定後の変更はできません。";
@@ -621,21 +704,177 @@
     try {
       sessionStorage.setItem("suzuleague", JSON.stringify({
         balloons: state.balloons, team: state.team,
-        locked: state.locked, scoredSeq: state.scoredSeq
+        locked: state.locked, lockedQid: state.lockedQid, scoredQid: state.scoredQid
       }));
     } catch (e) { /* プライベートモード等では保存しない */ }
   }
 
   function restore() {
     try {
-      var raw = sessionStorage.getItem("suzuleague");
-      if (!raw) return;
-      var s = JSON.parse(raw);
+      var s = JSON.parse(sessionStorage.getItem("suzuleague") || "{}");
       if (typeof s.balloons === "number") state.balloons = s.balloons;
       if (typeof s.team === "number") state.team = s.team;
       if (typeof s.locked === "number") state.locked = s.locked;
-      if (typeof s.scoredSeq === "number") state.scoredSeq = s.scoredSeq;
+      if (typeof s.lockedQid === "number") state.lockedQid = s.lockedQid;
+      if (typeof s.scoredQid === "number") state.scoredQid = s.scoredQid;
     } catch (e) { /* 壊れていたら初期値のまま */ }
+    try {
+      var v = JSON.parse(localStorage.getItem("suzuleague-viewer") || "null");
+      if (v && typeof v.id === "string") viewer = v;
+      var sc = JSON.parse(localStorage.getItem("suzuleague-score") || "null");
+      if (sc && typeof sc.errorSum === "number") score = sc;
+    } catch (e) { /* 壊れていたら初期値のまま */ }
+    if (!viewer.id) {
+      viewer.id = "v-" + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+      saveViewer();
+    }
+  }
+
+  function saveViewer() {
+    try { localStorage.setItem("suzuleague-viewer", JSON.stringify(viewer)); } catch (e) { /* 保存できない環境 */ }
+  }
+
+  // ---- 観客ランキング ------------------------------------------------
+  // 成績は端末の中で数え、正解発表のたびに cloud-server へ送る（rankingApi.js）。
+
+  function recordScore(qid, correct, mine) {
+    if (!qid || score.scored[qid]) return;
+    score.scored[qid] = true;
+    score.lastQuestion = Math.max(score.lastQuestion, qid);
+    if (mine !== null) {
+      score.errorSum += Math.abs(correct - mine);
+      score.answered += 1;
+    }
+    try { localStorage.setItem("suzuleague-score", JSON.stringify(score)); } catch (e) { /* 保存できない環境 */ }
+    submitScore();
+  }
+
+  function displayName() {
+    return viewer.name || ("ゲスト" + viewer.id.slice(-4));
+  }
+
+  function submitScore() {
+    if (!score.lastQuestion) return Promise.resolve();
+    return fetch("api/score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: viewer.id, name: displayName(), error_sum: score.errorSum,
+        answered: score.answered, last_question: score.lastQuestion
+      })
+    }).then(function (res) {
+      if (res.status === 400) {
+        return res.json().then(function (d) {
+          if (/ニックネーム/.test(d.error || "")) {   // 使えない名前ならゲスト名に戻して出し直す
+            viewer.name = null;
+            saveViewer();
+            el("join-err").textContent = d.error;
+            el("join").classList.remove("hidden");
+            return submitScore();
+          }
+        });
+      }
+    }).catch(function () { /* ランキングは諦めても回答の画面は止めない */ });
+  }
+
+  function loadMyRank(targetId) {
+    fetch("api/ranking?id=" + encodeURIComponent(viewer.id), { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (r) {
+        if (!r || !r.me) return;
+        var t = el(targetId);
+        t.innerHTML = "観客ランキング <b>" + r.me.rank + "</b> 位 / " + r.participants + "人中" +
+          "<br><small>誤差の合計 " + r.me.total + "（未回答は1問" + MISSED_PENALTY + "）</small>";
+        t.classList.remove("hidden");
+      })
+      .catch(function () { /* 表示しないだけ */ });
+  }
+
+  // 大画面がないので、ステージの回答も観客の画面に出す
+  function loadStageAnswer(qid) {
+    if (stageFetchedFor === qid) return;
+    stageFetchedFor = qid;
+    el("r-stage-row").classList.add("hidden");
+    fetch("api/player/state", { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (d) {
+        var s = d && d.state;
+        if (!s || !s.result || !s.question || s.question.id !== qid) return;
+        el("r-stage").textContent = s.result.answer + "%";
+        el("r-stage-row").classList.remove("hidden");
+      })
+      .catch(function () { /* 表示しないだけ */ });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function teamLabel(t) {
+    return t.name === "チーム" + t.number ? t.name : "チーム" + t.number + "　" + t.name;
+  }
+
+  var finalLoaded = false;
+  function renderFinal() {
+    show("view-final");
+    loadMyRank("f-rank");
+    if (finalLoaded) return;
+    fetch("api/player/state", { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (d) {
+        var s = d && d.state;
+        if (!s || !s.finished) return;
+        finalLoaded = true;
+        el("f-winner").textContent = s.winner ? teamLabel(s.winner) : "優勝チームなし";
+        el("f-prize").textContent = s.winner
+          ? "残りバルーン " + s.winner.balloons + " ／ 景品：お菓子の詰め合わせ"
+          : "クリアしたチームがありませんでした";
+        var teams = s.teams.slice().sort(function (a, b) {
+          var ca = a.status === "クリア" ? 1 : 0, cb = b.status === "クリア" ? 1 : 0;
+          return cb - ca || b.balloons - a.balloons;
+        });
+        el("f-teams").innerHTML = teams.map(function (t, i) {
+          var win = s.winner && s.winner.number === t.number;
+          return "<tr" + (win ? ' class="win"' : "") + "><td>" + (i + 1) + "位</td><td>" +
+            escapeHtml(teamLabel(t)) + '</td><td class="num">' + t.balloons + "個</td><td>" + t.status + "</td></tr>";
+        }).join("");
+      })
+      .catch(function () { /* 表示しないだけ */ });
+    fetch("api/ranking?limit=5", { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (r) {
+        if (!r || !r.top.length) return;
+        el("f-audience").innerHTML = r.top.map(function (t) {
+          return "<tr><td>" + t.rank + "位</td><td>" + escapeHtml(t.name) +
+            '</td><td class="num">誤差 ' + t.total + "</td></tr>";
+        }).join("");
+        el("f-audience-title").classList.remove("hidden");
+      })
+      .catch(function () { /* 表示しないだけ */ });
+  }
+
+  // ---- ニックネーム --------------------------------------------------
+
+  function setupJoin() {
+    if (viewer.name || viewer.skipped) return;
+    el("join").classList.remove("hidden");
+    el("join-form").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var name = el("join-name").value.trim();
+      if (!name) return;
+      viewer.name = name;
+      saveViewer();
+      el("join-err").textContent = "";
+      el("join").classList.add("hidden");
+      submitScore();
+    });
+    el("join-skip").addEventListener("click", function () {
+      viewer.skipped = true;
+      saveViewer();
+      el("join").classList.add("hidden");
+    });
   }
 
   // ---- cloud サーバへの接続 -------------------------------------------
@@ -696,13 +935,14 @@
   // ---- 起動 ----------------------------------------------------------
 
   el("slider").addEventListener("input", function (e) {
-    if (state.locked !== null) { setSlider(state.locked); return; }
+    var mine = myAnswer(num("P2S_QID"));
+    if (mine !== null) { setSlider(mine); return; }
     setSlider(Number(e.target.value));
   });
 
   Array.prototype.forEach.call(document.querySelectorAll("[data-delta]"), function (b) {
     b.addEventListener("click", function () {
-      if (state.locked !== null) return;
+      if (myAnswer(num("P2S_QID")) !== null) return;
       setSlider(state.answer + Number(b.getAttribute("data-delta")));
     });
   });
@@ -710,6 +950,7 @@
   el("lock-btn").addEventListener("click", lockAnswer);
 
   restore();
+  setupJoin();
   setSlider(state.answer);
   renderBalloons();
   show("view-idle");

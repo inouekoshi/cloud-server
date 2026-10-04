@@ -119,6 +119,10 @@
   details.card summary { cursor: pointer; font-weight: 700; }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
   td { padding: 6px 2px; border-top: 1px solid var(--line); }
+  td button {
+    min-height: 34px; padding: 0 10px; border-radius: 8px; font-size: 13px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
   td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   tr.current td { font-weight: 700; }
 
@@ -207,6 +211,14 @@
   <details class="card" id="teams-card">
     <summary>全チームの状況</summary>
     <table><tbody id="teams"></tbody></table>
+  </details>
+
+  <details class="card" id="ranking-card">
+    <summary>観客ランキング</summary>
+    <div class="source" style="margin-top:6px">不適切なニックネームは「隠す」を押すと、全員の画面の上位表示から外れます。</div>
+    <div class="muted" id="ranking-summary" style="margin-top:6px"></div>
+    <table><tbody id="ranking"></tbody></table>
+    <button type="button" class="secret" id="ranking-reset">ランキングをリセット（リハーサルの後に使う）</button>
   </details>
 </main>
 
@@ -485,6 +497,50 @@
     revealBtn.addEventListener(t, revealOff);
   });
   revealBtn.addEventListener("contextmenu", function (ev) { ev.preventDefault(); });
+
+  // ---- 観客ランキング（開いているときだけ取りに行く） ------------------
+
+  var rankingTimer = null;
+  function loadRanking() {
+    fetch("api/host/ranking", { headers: headers(false), cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (r) {
+        if (!r) { el("ranking-summary").textContent = "この画面では使えません（Render から開いたときだけ）"; return; }
+        el("ranking-summary").textContent = "参加 " + r.participants + "人 ・ 発表済み " + r.revealed + "問";
+        var hiddenIds = {};
+        r.entries.forEach(function (e) { if (e.hidden) hiddenIds[e.id] = true; });
+        var ranked = r.entries.slice(0, 30);
+        el("ranking").innerHTML = ranked.map(function (e) {
+          return "<tr><td>" + escapeHtml(e.name) + (e.hidden ? ' <span class="muted">（非表示）</span>' : "") +
+            '</td><td class="num"><button type="button" data-id="' + escapeHtml(e.id) + '" data-hidden="' + (e.hidden ? "0" : "1") + '">' +
+            (e.hidden ? "戻す" : "隠す") + "</button></td></tr>";
+        }).join("");
+      })
+      .catch(function () { /* 次の更新で取り直す */ });
+  }
+
+  el("ranking").addEventListener("click", function (ev) {
+    var b = ev.target.closest("button");
+    if (!b) return;
+    fetch("api/host/ranking/hide", {
+      method: "POST", headers: headers(true),
+      body: JSON.stringify({ id: b.getAttribute("data-id"), hidden: b.getAttribute("data-hidden") === "1" })
+    }).then(loadRanking);
+  });
+
+  el("ranking-reset").addEventListener("click", function () {
+    if (!confirm("観客ランキングをすべて消します。本番の前に一度だけ使ってください。よろしいですか？")) return;
+    fetch("api/host/ranking/reset", { method: "POST", headers: headers(true), body: "{}" })
+      .then(function (res) { toast(res.ok ? "ok" : "ng", res.ok ? "観客ランキングをリセットしました" : "リセットできませんでした"); loadRanking(); });
+  });
+
+  el("ranking-card").addEventListener("toggle", function () {
+    clearInterval(rankingTimer);
+    if (el("ranking-card").open) {
+      loadRanking();
+      rankingTimer = setInterval(loadRanking, 5000);
+    }
+  });
 
   poll();
   setInterval(poll, POLL_MS);
