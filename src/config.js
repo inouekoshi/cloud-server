@@ -10,6 +10,10 @@ module.exports = {
   // but the client never joins the room and never receives any variable update.
   maxClients: Number(process.env.MAX_CLIENTS) || 128,
 
+  // Shared secret for the Suzuleague host (MC) screen API (src/hostApi.js).
+  // The API is disabled when this is not set.
+  hostToken: process.env.HOST_TOKEN || '',
+
   // Maximum number of variables allowed in a single room.
   maxVariables: Number(process.env.MAX_VARIABLES) || 128,
 
