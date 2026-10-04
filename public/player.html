@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#111827">
+<title>スズリーグ 出演者の回答画面</title>
+<!--
+  出演者の回答画面。ステージ上の出演者が自分のスマホで%を回答する。
+  Render（cloud-server の public/player.html）から配信する。
+  元ファイルは suzuleague リポジトリの src/suzuleague/player.html。
+  書き出しは uv run python -m suzuleague.publish で行う。
+-->
+<style>
+  :root {
+    --bg: #f3f4f6;
+    --card: #ffffff;
+    --text: #111827;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #db2777;
+    --accent-text: #ffffff;
+    --key: #ffffff;
+    --ok: #15803d;
+    --ng: #b91c1c;
+    --balloon: #db2777;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1020;
+      --card: #161c2e;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --line: #263049;
+      --accent: #ec4899;
+      --key: #1f2740;
+      --ok: #4ade80;
+      --ng: #f87171;
+      --balloon: #f472b6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    padding: 0 16px calc(24px + env(safe-area-inset-bottom));
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 12px 0 4px;
+  }
+  header h1 { font-size: 15px; margin: 0; color: var(--muted); font-weight: 600; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13px;
+    padding: 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line);
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill[data-kind="ok"] .dot { background: var(--ok); }
+  .pill[data-kind="ng"] .dot { background: var(--ng); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin: 10px 0;
+  }
+  .label { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .team-name { font-size: 18px; font-weight: 800; overflow-wrap: anywhere; }
+  .balloons { text-align: right; white-space: nowrap; }
+  .balloons b { font-size: 30px; color: var(--balloon); font-variant-numeric: tabular-nums; }
+  .big { font-size: 24px; font-weight: 800; margin: 4px 0; overflow-wrap: anywhere; }
+  .question { font-size: 19px; font-weight: 700; margin: 6px 0 0; overflow-wrap: anywhere; }
+  .muted { color: var(--muted); }
+
+  .readout {
+    text-align: center; font-size: 64px; font-weight: 800; line-height: 1.1;
+    font-variant-numeric: tabular-nums; margin: 4px 0;
+  }
+  .readout small { font-size: 28px; margin-left: 4px; color: var(--muted); }
+  .readout.empty { color: var(--muted); }
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .keys button {
+    min-height: 58px; font-size: 26px; font-weight: 700; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--key); color: var(--text);
+    touch-action: manipulation;
+  }
+  .keys button.sub { font-size: 17px; color: var(--muted); }
+  .send {
+    width: 100%; min-height: 64px; margin-top: 12px; border: 0; border-radius: 14px;
+    background: var(--accent); color: var(--accent-text); font-size: 20px; font-weight: 800;
+    touch-action: manipulation;
+  }
+  .send:disabled { opacity: .4; }
+  .status { text-align: center; margin-top: 10px; min-height: 24px; font-weight: 700; }
+  .status[data-kind="ok"] { color: var(--ok); }
+  .status[data-kind="ng"] { color: var(--ng); }
+
+  .result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 8px; }
+  .result div { background: var(--bg); border-radius: 10px; padding: 8px 4px; }
+  .result b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  td { padding: 8px 2px; border-top: 1px solid var(--line); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.win td { font-weight: 800; }
+
+  .code-form input {
+    width: 100%; min-height: 64px; font-size: 36px; text-align: center; letter-spacing: .3em;
+    border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    margin: 10px 0;
+  }
+  .code-form button {
+    width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: var(--accent);
+    color: #fff; font-size: 18px; font-weight: 700;
+  }
+  .link { background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: 13px; padding: 8px 0; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>スズリーグ 出演者の回答画面</h1>
+  <span class="pill" id="conn" data-kind=""><span class="dot"></span><span id="conn-text">接続中…</span></span>
+</header>
+
+<section class="card row" id="team-card">
+  <div>
+    <div class="label" id="team-label">ステージのチーム</div>
+    <div class="team-name" id="team-name">—</div>
+    <div class="muted" id="round"></div>
+  </div>
+  <div class="balloons"><span class="label">残りバルーン</span><br><b id="balloons">—</b></div>
+</section>
+
+<!-- 合言葉の入力 -->
+<section class="card code-form hidden" id="view-code">
+  <div class="big">合言葉を入力</div>
+  <div class="muted">司会が伝える4桁の数字を入力してください。チームが変わると合言葉も変わります。</div>
+  <form id="code-form">
+    <input id="code-input" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required>
+    <button type="submit">決定</button>
+  </form>
+  <div class="status" id="code-status"></div>
+</section>
+
+<!-- 待機・お知らせ -->
+<section class="card hidden" id="view-message">
+  <div class="big" id="m-title"></div>
+  <div class="muted" id="m-body"></div>
+  <p class="question hidden" id="m-question"></p>
+</section>
+
+<!-- 回答 -->
+<section class="card hidden" id="view-answer">
+  <div class="label" id="a-label">回答時間</div>
+  <p class="question" id="a-question"></p>
+  <div class="readout empty" id="readout">—<small>%</small></div>
+  <div class="keys" id="keys">
+    <button type="button" data-key="1">1</button>
+    <button type="button" data-key="2">2</button>
+    <button type="button" data-key="3">3</button>
+    <button type="button" data-key="4">4</button>
+    <button type="button" data-key="5">5</button>
+    <button type="button" data-key="6">6</button>
+    <button type="button" data-key="7">7</button>
+    <button type="button" data-key="8">8</button>
+    <button type="button" data-key="9">9</button>
+    <button type="button" class="sub" data-key="clear">クリア</button>
+    <button type="button" data-key="0">0</button>
+    <button type="button" class="sub" data-key="back">1字消す</button>
+  </div>
+  <button type="button" class="send" id="send-btn" disabled>この数字で回答する</button>
+  <div class="status" id="send-status"></div>
+  <button type="button" class="link" id="change-code">合言葉を入れ直す</button>
+</section>
+
+<!-- 正解発表 -->
+<section class="card hidden" id="view-result">
+  <div class="label" id="r-label">結果</div>
+  <p class="question" id="r-question"></p>
+  <div class="result">
+    <div><span class="label">回答</span><b id="r-answer"></b></div>
+    <div><span class="label">正解</span><b id="r-correct"></b></div>
+    <div><span class="label">割れた数</span><b id="r-damage"></b></div>
+  </div>
+  <div class="status" id="r-verdict"></div>
+</section>
+
+<!-- 全体結果 -->
+<section class="card hidden" id="view-final">
+  <div class="label">全体結果</div>
+  <div class="big" id="f-winner"></div>
+  <div id="f-prize"></div>
+  <table><tbody id="f-teams"></tbody></table>
+</section>
+
+<script>
+(function () {
+  "use strict";
+
+  var POLL_MS = 1000;
+  var STALE_SEC = 8;
+  var CODE_KEY = "suzuleague-player-code";
+  var S = { IDLE: 0, TEAM_INTRO: 1, QUESTION: 2, ANSWERING: 3, REVEAL: 4,
+            ROUND_RESULT: 5, TEAM_RESULT: 6, EXHIBITION_ANSWERING: 7, FINISHED: 8 };
+
+  var el = function (id) { return document.getElementById(id); };
+  var views = ["view-code", "view-message", "view-answer", "view-result", "view-final"];
+  var current = null;
+  var input = "";            // 入力中の数字（文字列）
+  var lastQuestionId = null;
+  var sent = null;           // 送った回答 {questionId, value}
+  var sending = false;
+  var code = "";
+
+  try { code = sessionStorage.getItem(CODE_KEY) || ""; } catch (e) { /* 保存できない環境 */ }
+
+  function show(which) {
+    views.forEach(function (v) { el(v).classList.toggle("hidden", v !== which); });
+  }
+
+  function setConn(kind, text) {
+    el("conn").setAttribute("data-kind", kind);
+    el("conn-text").textContent = text;
+  }
+
+  function status(id, kind, text) {
+    el(id).setAttribute("data-kind", kind || "");
+    el(id).textContent = text || "";
+  }
+
+  function teamLabel(t) {
+    return t.name === "チーム" + t.number ? t.name : "チーム" + t.number + "　" + t.name;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  // ---- 合言葉 ----------------------------------------------------------
+
+  function needCode() { return !code; }
+
+  el("code-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var v = el("code-input").value.trim();
+    if (!/^\d{4}$/.test(v)) return;
+    code = v;
+    status("code-status", "", "");
+    try { sessionStorage.setItem(CODE_KEY, code); } catch (e) { /* 保存できない環境 */ }
+    el("code-input").value = "";
+    render(current);
+  });
+
+  el("change-code").addEventListener("click", function () {
+    code = "";
+    try { sessionStorage.removeItem(CODE_KEY); } catch (e) { /* 保存できない環境 */ }
+    render(current);
+  });
+
+  // ---- 状態の取得 ------------------------------------------------------
+
+  function poll() {
+    fetch("api/player/state", { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        if (!data.state) setConn("ng", "準備中");
+        else if (data.age > STALE_SEC) setConn("ng", "進行が止まっています");
+        else setConn("ok", "接続中");
+        render(data.state);
+      })
+      .catch(function () { setConn("ng", "つながりません"); });
+  }
+
+  // ---- 描画 ------------------------------------------------------------
+
+  function message(title, body, questionText) {
+    el("m-title").textContent = title;
+    el("m-body").textContent = body || "";
+    el("m-question").textContent = questionText || "";
+    el("m-question").classList.toggle("hidden", !questionText);
+    show("view-message");
+  }
+
+  function render(s) {
+    current = s;
+    if (!s) {
+      el("team-name").textContent = "—";
+      el("balloons").textContent = "—";
+      el("round").textContent = "";
+      message("準備中です", "進行が始まるまでお待ちください。");
+      return;
+    }
+
+    if (s.team) {
+      el("team-name").textContent = teamLabel(s.team);
+      el("balloons").textContent = s.team.balloons;
+      el("round").textContent = s.round ? "第" + s.round + "問 / 全" + s.rounds_per_team + "問" : "";
+    } else {
+      el("team-name").textContent = s.finished ? "全チーム終了" : "開始前";
+      el("balloons").textContent = "—";
+      el("round").textContent = "";
+    }
+
+    var q = s.question;
+    if (q && q.id !== lastQuestionId) {   // 新しい問題になったら入力をリセット
+      lastQuestionId = q.id;
+      input = "";
+      status("send-status", "", "");
+      updateReadout();
+    }
+
+    switch (s.state) {
+      case S.IDLE:
+        message("まもなく始まります", "ステージに呼ばれたら、司会が伝える合言葉を入力してください。");
+        break;
+      case S.TEAM_INTRO:
+        if (needCode()) { show("view-code"); break; }
+        message(teamLabel(s.team) + " の登場です", "このあと問題が出ます。この画面のままお待ちください。");
+        break;
+      case S.QUESTION:
+        if (needCode()) { show("view-code"); break; }
+        message("第" + s.round + "問", "まもなく回答時間です。", q && q.text);
+        break;
+      case S.ANSWERING:
+      case S.EXHIBITION_ANSWERING:
+        if (needCode()) { show("view-code"); break; }
+        renderAnswer(s);
+        break;
+      case S.REVEAL:
+      case S.ROUND_RESULT:
+        renderResult(s);
+        break;
+      case S.TEAM_RESULT:
+        message(
+          s.team && s.team.failed ? "バルーンが尽きました" : "クリア！ 残り " + s.team.balloons + " 個",
+          "お疲れさまでした。次のチームに交代します。"
+        );
+        break;
+      case S.FINISHED:
+        renderFinal(s);
+        break;
+      default:
+        message("お待ちください", "");
+    }
+  }
+
+  function renderAnswer(s) {
+    el("a-label").textContent = s.exhibition ? "回答時間（エキシビション・採点なし）" : "回答時間";
+    el("a-question").textContent = s.question ? s.question.text : "";
+    var arrived = s.answer !== null && sent && sent.questionId === (s.question && s.question.id) && s.answer === sent.value;
+    if (arrived && !sending) {
+      status("send-status", "ok", s.answer + "% で回答しました（正解発表までは変更できます）");
+    }
+    updateReadout();
+    show("view-answer");
+  }
+
+  function renderResult(s) {
+    var r = s.result;
+    if (!r) { message("正解は…", "ステージの発表をお待ちください。"); return; }
+    el("r-label").textContent = r.exhibition ? "結果（エキシビション・採点なし）" : "結果";
+    el("r-question").textContent = s.question ? s.question.text : "";
+    el("r-answer").textContent = r.answer + "%";
+    el("r-correct").textContent = r.correct + "%";
+    el("r-damage").textContent = r.perfect ? "0 ★" : r.damage;
+    status("r-verdict", r.perfect ? "ok" : "",
+      r.perfect ? "ぴったり正解！" : (r.exhibition ? "" : "残りバルーン " + r.balloons_after + " 個"));
+    show("view-result");
+  }
+
+  function renderFinal(s) {
+    el("f-winner").textContent = s.winner ? "優勝　" + teamLabel(s.winner) : "優勝チームなし";
+    el("f-prize").textContent = s.winner ? "景品：お菓子の詰め合わせ" : "クリアしたチームがありませんでした";
+    var teams = s.teams.slice().sort(function (a, b) {
+      var ca = a.status === "クリア" ? 1 : 0, cb = b.status === "クリア" ? 1 : 0;
+      return cb - ca || b.balloons - a.balloons;
+    });
+    el("f-teams").innerHTML = teams.map(function (t, i) {
+      var win = s.winner && s.winner.number === t.number;
+      return "<tr" + (win ? ' class="win"' : "") + "><td>" + (i + 1) + "位</td><td>" + escapeHtml(teamLabel(t)) +
+        '</td><td class="num">' + t.balloons + "個</td><td>" + t.status + "</td></tr>";
+    }).join("");
+    show("view-final");
+  }
+
+  // ---- 入力と送信 ------------------------------------------------------
+
+  function updateReadout() {
+    var r = el("readout");
+    r.classList.toggle("empty", input === "");
+    r.innerHTML = (input === "" ? "—" : input) + "<small>%</small>";
+    el("send-btn").disabled = input === "" || sending;
+  }
+
+  Array.prototype.forEach.call(el("keys").querySelectorAll("button"), function (b) {
+    b.addEventListener("click", function () {
+      var k = b.getAttribute("data-key");
+      if (k === "clear") input = "";
+      else if (k === "back") input = input.slice(0, -1);
+      else {
+        var next = input === "0" ? k : input + k;
+        if (Number(next) <= 100 && next.length <= 3) input = next;
+      }
+      updateReadout();
+    });
+  });
+
+  el("send-btn").addEventListener("click", function () {
+    if (!current || !current.question || input === "" || sending) return;
+    var value = Number(input);
+    var questionId = current.question.id;
+    sending = true;
+    updateReadout();
+    status("send-status", "", "送信中…");
+    fetch("api/player/answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code, value: value, question_id: questionId })
+    })
+      .then(function (res) {
+        return res.json().then(function (data) { return { ok: res.ok, status: res.status, data: data }; });
+      })
+      .then(function (r) {
+        sending = false;
+        if (r.ok) {
+          sent = { questionId: questionId, value: value };
+          status("send-status", "ok", value + "% を送りました");
+        } else {
+          if (r.status === 403) {   // 合言葉が違う（チームが変わった等）
+            code = "";
+            try { sessionStorage.removeItem(CODE_KEY); } catch (e) { /* 保存できない環境 */ }
+          }
+          status("send-status", "ng", r.data.error || "送信できませんでした");
+          if (r.status === 403) {
+            status("code-status", "ng", r.data.error);
+            render(current);
+          }
+        }
+        updateReadout();
+      })
+      .catch(function () {
+        sending = false;
+        status("send-status", "ng", "送信できませんでした。もう一度押してください");
+        updateReadout();
+      });
+  });
+
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>
+</body>
+</html>

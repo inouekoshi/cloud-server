@@ -57,6 +57,69 @@ describe('HostRelayStore', () => {
   });
 });
 
+describe('contestant answers', () => {
+  const answering = (overrides = {}) => ({
+    player_code: '0427',
+    player: { state: 3, accepting_answer: true, question: { id: 7, text: 'Q7' } },
+    ...overrides,
+  });
+
+  test('queued as an answer command for the backstage PC', () => {
+    const store = new HostRelayStore(() => 5);
+    store.setState(answering());
+    expect(store.pushPlayerAnswer({ code: '0427', value: 45, question_id: 7 })).toBe(1);
+    expect(store.commandsAfter(0).commands).toEqual([
+      { seq: 1, type: 'answer', value: 45, source: 'player', code: '0427', question_id: 7, at: 5 },
+    ]);
+  });
+
+  test('rejected unless the game is ready and accepting', () => {
+    const store = new HostRelayStore();
+    expect(() => store.pushPlayerAnswer({ code: '0427', value: 45, question_id: 7 })).toThrow('つながっていません');
+    store.setState(answering({ player: { state: 2, accepting_answer: false, question: { id: 7 } } }));
+    expect(() => store.pushPlayerAnswer({ code: '0427', value: 45, question_id: 7 })).toThrow('受け付けていません');
+    store.setState(answering());
+    expect(() => store.pushPlayerAnswer({ code: '0427', value: 45, question_id: 6 })).toThrow('問題が変わりました');
+    expect(() => store.pushPlayerAnswer({ code: '0427', value: 101, question_id: 7 })).toThrow('0〜100');
+    expect(store.commandsAfter(0).commands).toHaveLength(0);
+  });
+
+  test('wrong codes are rejected and eventually locked out', () => {
+    let now = 0;
+    const store = new HostRelayStore(() => now);
+    store.setState(answering());
+    for (let i = 0; i < 29; i++) {
+      expect(() => store.pushPlayerAnswer({ code: String(i).padStart(4, '0'), value: 1, question_id: 7 })).toThrow('合言葉が違います');
+    }
+    // the 30th failure triggers the lockout; even the right code is refused for a while
+    expect(() => store.pushPlayerAnswer({ code: '9999', value: 1, question_id: 7 })).toThrow('合言葉が違います');
+    expect(() => store.pushPlayerAnswer({ code: '0427', value: 1, question_id: 7 })).toThrow('しばらく');
+    now += 31 * 1000;
+    expect(store.pushPlayerAnswer({ code: '0427', value: 1, question_id: 7 })).toBe(1);
+  });
+
+  test('failures spread over time do not lock out', () => {
+    let now = 0;
+    const store = new HostRelayStore(() => now);
+    store.setState(answering());
+    for (let i = 0; i < 60; i++) {
+      now += 3000;
+      expect(() => store.pushPlayerAnswer({ code: 'xxxx', value: 1, question_id: 7 })).toThrow('合言葉が違います');
+    }
+    expect(store.pushPlayerAnswer({ code: '0427', value: 1, question_id: 7 })).toBe(1);
+  });
+
+  test('player state exposes only the public part', () => {
+    const store = new HostRelayStore(() => 0);
+    expect(store.getPlayerState()).toEqual({ state: null, age: null });
+    store.setState({ ...answering(), question: { correct: 93 } });
+    const { state } = store.getPlayerState();
+    expect(state).toEqual(answering().player);
+    expect(JSON.stringify(state)).not.toContain('0427');
+    expect(JSON.stringify(state)).not.toContain('93');
+  });
+});
+
 test('tokenMatches', () => {
   expect(tokenMatches('secret', 'secret')).toBe(true);
   expect(tokenMatches('secreT', 'secret')).toBe(false);
@@ -142,6 +205,14 @@ describe('HTTP API', () => {
       body: '{not json',
     });
     expect(res.status).toBe(400);
+  });
+
+  test('contestant endpoints need no host token', async () => {
+    let res = await call('GET', '/api/player/state', { token: '' });
+    expect(res.status).toBe(200);
+    res = await call('POST', '/api/player/answer', { token: '', body: { code: 'nope', value: 1, question_id: 1 } });
+    expect([403, 503]).toContain(res.status);
+    expect((await res.json()).error).toBeTruthy();
   });
 
   test('unknown API paths get 404', async () => {

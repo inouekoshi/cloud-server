@@ -73,6 +73,11 @@
   }
   .label { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
   .state { font-size: 26px; font-weight: 800; margin: 2px 0 0; }
+  .code {
+    margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: var(--bg);
+    font-size: 14px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .code b { font-size: 26px; letter-spacing: .15em; font-variant-numeric: tabular-nums; }
   .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   .team-name { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
   .balloons { text-align: right; white-space: nowrap; }
@@ -157,6 +162,7 @@
   <section class="card">
     <div class="label">いまの進行</div>
     <div class="state" id="state">—</div>
+    <div class="code hidden" id="code-box">出演者の合言葉 <b id="player-code"></b></div>
     <div class="row" id="team-row" style="margin-top:8px">
       <div>
         <div class="team-name" id="team-name">—</div>
@@ -306,6 +312,8 @@
     }
 
     el("state").textContent = s.state_label;
+    show("code-box", !!s.player_code);
+    if (s.player_code) el("player-code").textContent = s.player_code;
 
     if (s.team) {
       el("team-name").textContent = teamLabel(s.team);
