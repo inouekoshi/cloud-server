@@ -17,6 +17,12 @@ describe('HostRelayStore', () => {
     expect(store.commandsAfter(2)).toEqual({ latest: 2, commands: [] });
   });
 
+  test('resync is accepted without extra fields', () => {
+    const store = new HostRelayStore(() => 1000);
+    expect(store.pushCommand({ type: 'resync', value: 5 })).toBe(1);
+    expect(store.commandsAfter(0).commands).toEqual([{ seq: 1, type: 'resync', at: 1000 }]);
+  });
+
   test('invalid commands are rejected', () => {
     const store = new HostRelayStore();
     expect(() => store.pushCommand(null)).toThrow();

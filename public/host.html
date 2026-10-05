@@ -220,6 +220,12 @@
     <table><tbody id="ranking"></tbody></table>
     <button type="button" class="secret" id="ranking-reset">ランキングをリセット（リハーサルの後に使う）</button>
   </details>
+
+  <details class="card" id="trouble-card">
+    <summary>困ったとき</summary>
+    <div class="source" style="margin-top:6px">Scratch の画面を開き直したり緑の旗を押し直したりして、表示が今の進行とずれたときに押す。</div>
+    <button type="button" class="secret" id="resync-btn">Scratch に今の状態を送り直す</button>
+  </details>
 </main>
 
 <div class="dock">
@@ -482,6 +488,10 @@
     }
     send({ type: "answer", value: Number(v) });
     el("proxy-input").value = "";
+  });
+
+  el("resync-btn").addEventListener("click", function () {
+    send({ type: "resync" });
   });
 
   // 正解は押している間だけ表示する（周りから見えないように）

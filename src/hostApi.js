@@ -32,7 +32,8 @@ const { RankingStore, RankingError } = require('./rankingApi');
 
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_COMMANDS = 100;
-const COMMAND_TYPES = ['next', 'answer'];
+// 'resync' asks the PC to resend the current state to Scratch (after Scratch is reloaded).
+const COMMAND_TYPES = ['next', 'answer', 'resync'];
 
 // Brute-force protection for the contestant code: after too many wrong codes
 // in a short time, refuse every attempt for a while.
