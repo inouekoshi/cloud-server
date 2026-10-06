@@ -218,7 +218,7 @@
     <div class="source" style="margin-top:6px">不適切なニックネームは「隠す」を押すと、全員の画面の上位表示から外れます。</div>
     <div class="muted" id="ranking-summary" style="margin-top:6px"></div>
     <table><tbody id="ranking"></tbody></table>
-    <button type="button" class="secret" id="ranking-reset">ランキングをリセット（リハーサルの後に使う）</button>
+    <button type="button" class="secret hidden" id="ranking-reset">ランキングをリセット（リハーサルの後に使う）</button>
   </details>
 
   <details class="card" id="trouble-card">
@@ -515,7 +515,9 @@
     fetch("api/host/ranking", { headers: headers(false), cache: "no-store" })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (r) {
-        if (!r) { el("ranking-summary").textContent = "この画面では使えません（Render から開いたときだけ）"; return; }
+        // 裏方PCの予備の画面（localhost）にはランキングの機能がない。押しても失敗するボタンは出さない
+        el("ranking-reset").classList.toggle("hidden", !r);
+        if (!r) { el("ranking-summary").textContent = "この画面では使えません。スマホの司会者画面（suzuleague-cloud.onrender.com）で操作してください"; return; }
         el("ranking-summary").textContent = "参加 " + r.participants + "人 ・ 発表済み " + r.revealed + "問";
         var hiddenIds = {};
         r.entries.forEach(function (e) { if (e.hidden) hiddenIds[e.id] = true; });
