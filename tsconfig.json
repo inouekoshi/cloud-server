@@ -20,6 +20,8 @@
     "allowUnreachableCode": false,
   },
   "exclude": [
-    "doc/**"
+    "doc/**",
+    // suzuleague の stage.py が書き出す Scratch のステージ画面（TurboWarp Packager の生成物）
+    "public/stage/**"
   ]
 }
