@@ -496,6 +496,12 @@
   var views = ["view-idle", "view-question", "view-answer", "view-reveal", "view-message", "view-final"];
   var MISSED_PENALTY = 50;   // 観客ランキングで未回答の問題に数える誤差（cloud-server と同じ）
 
+  // 正解発表（ステート4）を受けてから、正解を画面に出すまでに待つ時間。
+  // Scratch 画面はゲージを13.1〜13.5秒動かしてから正解を出す（スプライト「正解」の
+  // 「判定までの時間」13秒 + 最後の0.1〜0.5秒）。観客の画面が先に答えを出さないよう、少し長く待つ。
+  // Scratch 側の演出の長さを変えたら、ここも合わせる。
+  var REVEAL_DELAY_MS = 14000;
+
   var state = {
     vars: {},          // 受信したP2S_*の生値
     answer: 50,        // スライダーの現在値
@@ -503,8 +509,11 @@
     lockedQid: null,   // locked がどの問題への回答か
     balloons: INITIAL_BALLOONS,
     team: 0,
-    scoredQid: null    // チーム内のバルーンを減らし済みの問題（二重に減らさない）
+    scoredQid: null,   // チーム内のバルーンを減らし済みの問題（二重に減らさない）
+    revealQid: null,   // 正解発表を受け取った問題
+    revealAt: 0        // その問題の正解を出してよい時刻（Date.now() と同じ単位）
   };
+  var revealTimer = null;
 
   // 観客ランキング用。リロードしても消えないよう localStorage に置く
   var viewer = { id: null, name: null };
@@ -581,6 +590,7 @@
     }
 
     renderBalloons();
+    clearTimeout(revealTimer);
     if (st !== S.TEAM_RESULT) el("m-rank").classList.add("hidden");
 
     if (st === null) { show("view-idle"); return; }
@@ -611,8 +621,12 @@
         break;
 
       case S.REVEAL:
+        renderReveal(qid, revealWait(qid));
+        break;
+
       case S.ROUND_RESULT:
-        renderReveal(qid);
+        // 司会が次へ進めた後なので、Scratch の演出は終わっている。待たずに出す
+        renderReveal(qid, 0);
         break;
 
       case S.TEAM_INTRO:
@@ -639,18 +653,34 @@
     }
   }
 
-  function renderReveal(qid) {
-    var correct = num("P2S_CORRECT");
+  // 正解発表を受けてから、正解を出してよくなるまでの残りミリ秒。
+  // 出してよい時刻を問題ごとに覚えておき、リロードしても待ち直しにならないようにする。
+  function revealWait(qid) {
+    var now = Date.now();
+    if (state.revealQid !== qid || state.revealAt - now > REVEAL_DELAY_MS) {
+      state.revealQid = qid;
+      state.revealAt = now + REVEAL_DELAY_MS;
+      save();
+    }
+    return Math.max(0, state.revealAt - now);
+  }
 
-    // 正解が未公開（-1）のあいだは待機表示のまま
-    if (correct === null || correct < 0) {
+  function renderReveal(qid, wait) {
+    var correct = num("P2S_CORRECT");
+    var mine = myAnswer(qid);
+
+    // 正解が未公開（-1）のあいだと、Scratch の演出が終わるまでは待機表示のまま
+    if (correct === null || correct < 0 || wait > 0) {
       el("m-title").textContent = "正解は…？";
-      el("m-body").textContent = "ステージの発表をお待ちください。";
+      el("m-body").textContent = (mine === null ? "" : "あなたの予想は " + mine + "%。") +
+        "ステージの発表をお待ちください。";
       show("view-message");
+      // 成績は画面に出ないので、待たずに数えて送る（待つあいだに閉じても記録が残る）
+      if (correct !== null && correct >= 0) recordScore(qid, correct, mine);
+      if (wait > 0) revealTimer = setTimeout(render, wait);
       return;
     }
 
-    var mine = myAnswer(qid);
     recordScore(qid, correct, mine);
     loadStageAnswer(qid);
 
@@ -704,7 +734,8 @@
     try {
       sessionStorage.setItem("suzuleague", JSON.stringify({
         balloons: state.balloons, team: state.team,
-        locked: state.locked, lockedQid: state.lockedQid, scoredQid: state.scoredQid
+        locked: state.locked, lockedQid: state.lockedQid, scoredQid: state.scoredQid,
+        revealQid: state.revealQid, revealAt: state.revealAt
       }));
     } catch (e) { /* プライベートモード等では保存しない */ }
   }
@@ -717,6 +748,8 @@
       if (typeof s.locked === "number") state.locked = s.locked;
       if (typeof s.lockedQid === "number") state.lockedQid = s.lockedQid;
       if (typeof s.scoredQid === "number") state.scoredQid = s.scoredQid;
+      if (typeof s.revealQid === "number") state.revealQid = s.revealQid;
+      if (typeof s.revealAt === "number") state.revealAt = s.revealAt;
     } catch (e) { /* 壊れていたら初期値のまま */ }
     try {
       var v = JSON.parse(localStorage.getItem("suzuleague-viewer") || "null");
