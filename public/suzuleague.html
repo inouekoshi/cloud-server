@@ -497,10 +497,8 @@
   var MISSED_PENALTY = 50;   // 観客ランキングで未回答の問題に数える誤差（cloud-server と同じ）
 
   // 正解発表（ステート4）を受けてから、正解を画面に出すまでに待つ時間。
-  // Scratch 画面はゲージを13.1〜13.5秒動かしてから正解を出す（スプライト「正解」の
-  // 「判定までの時間」13秒 + 最後の0.1〜0.5秒）。実測では、受け取りと描画の遅れを含めて13.3〜13.7秒。
-  // 観客の画面が先に答えを出さないよう、大画面のPCが重いときの分も見て長めに待つ。
-  // Scratch 側の演出の長さを変えたら、ここも合わせる。
+  // ステージ画面（大画面）はゲージを動かしてから正解を出すので、それより先に出さない。
+  // 長さは書き出しのときに protocol.py の REVEAL_SECONDS から埋め込む（司会の「次へ」も同じあいだ受け付けない）。
   var REVEAL_DELAY_MS = 15000;
 
   var state = {
@@ -519,7 +517,6 @@
   // 観客ランキング用。リロードしても消えないよう localStorage に置く
   var viewer = { id: null, name: null };
   var score = { errorSum: 0, answered: 0, lastQuestion: 0, scored: {} };
-  var stageFetchedFor = null;  // ステージの回答を取りに行った問題
 
   // いまの問題に対して決定した回答（ほかの問題のものは無効）
   function myAnswer(qid) {
@@ -683,7 +680,7 @@
     }
 
     recordScore(qid, correct, mine);
-    loadStageAnswer(qid);
+    showStageAnswer();
 
     if (mine === null) {
       el("m-title").textContent = "正解は " + correct + "%";
@@ -824,20 +821,12 @@
       .catch(function () { /* 表示しないだけ */ });
   }
 
-  // 大画面がないので、ステージの回答も観客の画面に出す
-  function loadStageAnswer(qid) {
-    if (stageFetchedFor === qid) return;
-    stageFetchedFor = qid;
-    el("r-stage-row").classList.add("hidden");
-    fetch("api/player/state", { cache: "no-store" })
-      .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (d) {
-        var s = d && d.state;
-        if (!s || !s.result || !s.question || s.question.id !== qid) return;
-        el("r-stage").textContent = s.result.answer + "%";
-        el("r-stage-row").classList.remove("hidden");
-      })
-      .catch(function () { /* 表示しないだけ */ });
+  // ステージ（出演者）の回答も出す。採点に使われた回答は P2S_ANSWER で届いている
+  function showStageAnswer() {
+    var answer = num("P2S_ANSWER");
+    var known = answer !== null && answer >= 0;
+    if (known) el("r-stage").textContent = answer + "%";
+    el("r-stage-row").classList.toggle("hidden", !known);
   }
 
   function escapeHtml(s) {

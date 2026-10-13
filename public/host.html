@@ -419,6 +419,9 @@
     if (current.needs_answer) {
       btn.disabled = true; sub.textContent = "回答が届くと押せます"; return;
     }
+    if (current.hold > 0) {     // 大画面より先に、ほかの画面で正解が出ないようにする
+      btn.disabled = true; sub.textContent = "正解発表の演出中… あと" + current.hold + "秒で押せます"; return;
+    }
     btn.disabled = false;
     sub.textContent = current.next_action || "";
   }
