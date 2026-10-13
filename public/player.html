@@ -238,6 +238,11 @@
     el(id).textContent = text || "";
   }
 
+  // 優勝チーム（同点なら複数）。裏方PCが古いと "winner"（1チーム）で届くので、どちらも読む
+  function winnersOf(s) {
+    return s.winners || (s.winner ? [s.winner] : []);
+  }
+
   function teamLabel(t) {
     return t.name === "チーム" + t.number ? t.name : "チーム" + t.number + "　" + t.name;
   }
@@ -384,15 +389,21 @@
   }
 
   function renderFinal(s) {
-    el("f-winner").textContent = s.winner ? "優勝　" + teamLabel(s.winner) : "優勝チームなし";
-    el("f-prize").textContent = s.winner ? "景品：お菓子の詰め合わせ" : "クリアしたチームがありませんでした";
-    var teams = s.teams.slice().sort(function (a, b) {
+    var winners = winnersOf(s);
+    el("f-winner").textContent = winners.length
+      ? (winners.length > 1 ? "同点優勝　" : "優勝　") + winners.map(teamLabel).join("・")
+      : "優勝チームなし";
+    el("f-prize").textContent = winners.length ? "景品：お菓子の詰め合わせ" : "クリアしたチームがありませんでした";
+    // クリアしたチームが先、その中は残りバルーンの多い順。同じなら同じ順位
+    function order(a, b) {
       var ca = a.status === "クリア" ? 1 : 0, cb = b.status === "クリア" ? 1 : 0;
       return cb - ca || b.balloons - a.balloons;
-    });
-    el("f-teams").innerHTML = teams.map(function (t, i) {
-      var win = s.winner && s.winner.number === t.number;
-      return "<tr" + (win ? ' class="win"' : "") + "><td>" + (i + 1) + "位</td><td>" + escapeHtml(teamLabel(t)) +
+    }
+    var teams = s.teams.slice().sort(order);
+    el("f-teams").innerHTML = teams.map(function (t) {
+      var rank = 1 + teams.filter(function (o) { return order(o, t) < 0; }).length;
+      var win = winners.some(function (w) { return w.number === t.number; });
+      return "<tr" + (win ? ' class="win"' : "") + "><td>" + rank + "位</td><td>" + escapeHtml(teamLabel(t)) +
         '</td><td class="num">' + t.balloons + "個</td><td>" + t.status + "</td></tr>";
     }).join("");
     show("view-final");

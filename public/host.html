@@ -370,9 +370,11 @@
 
     show("winner-card", s.finished);
     if (s.finished) {
-      if (s.winner) {
-        el("winner-name").textContent = teamLabel(s.winner);
-        el("winner-prize").textContent = "残りバルーン " + s.winner.balloons + " ／ 景品：お菓子の詰め合わせ";
+      var winners = winnersOf(s);
+      if (winners.length) {
+        el("winner-name").textContent = winners.map(teamLabel).join("・");
+        el("winner-prize").textContent = (winners.length > 1 ? "同点優勝 ／ " : "") +
+          "残りバルーン " + winners[0].balloons + " ／ 景品：お菓子の詰め合わせ";
       } else {
         el("winner-name").textContent = "優勝チームなし";
         el("winner-prize").textContent = "クリアしたチームがありませんでした";
@@ -391,6 +393,11 @@
         '</td><td class="num">' + t.balloons + '個</td><td class="num">' + t.finished_rounds + "/5</td><td>" + t.status + "</td></tr>";
     });
     el("teams").innerHTML = rows.join("");
+  }
+
+  // 優勝チーム（同点なら複数）。裏方PCが古いと "winner"（1チーム）で届くので、どちらも読む
+  function winnersOf(s) {
+    return s.winners || (s.winner ? [s.winner] : []);
   }
 
   // チーム名が未設定（既定の「チーム1」など）なら番号を重ねて出さない
