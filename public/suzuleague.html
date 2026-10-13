@@ -458,7 +458,7 @@
 (function () {
   "use strict";
 
-  // 問題文は uv run python -m suzuleague.questions --audience-json で生成して差し替える。
+  // 問題文は書き出しのとき（uv run python -m suzuleague.publish）に questions.py から埋め込む。
   // 正解はここには持たない（先に見えてしまうため）。正解発表時に P2S_CORRECT で届く。
   var QUESTIONS = {
   "1": "三重県に住んでいる人は何パーセント？",
