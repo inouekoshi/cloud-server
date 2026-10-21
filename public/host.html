@@ -254,6 +254,7 @@
   var el = function (id) { return document.getElementById(id); };
   var current = null;         // 最後に受け取った状態
   var pending = null;         // 送信中の操作 {seq, at}
+  var stale = false;          // PCからの更新が途絶えている（落ちた・起動し直している）
   var lastShownSeq = null;
   var token = "";
 
@@ -308,7 +309,8 @@
           render(null);
           return;
         }
-        if (data.age > STALE_SEC) setConn("ng", "PCの応答なし（" + Math.round(data.age) + "秒）");
+        stale = data.age > STALE_SEC;
+        if (stale) setConn("ng", "PCの応答なし（" + Math.round(data.age) + "秒）");
         else setConn("ok", "PCと接続中");
         render(data.state);
       })
@@ -419,6 +421,10 @@
     }
     if (current.finished) {
       btn.disabled = true; sub.textContent = "ゲームは終了しました"; return;
+    }
+    // PCが落ちているあいだに押しても、起動し直したPCは古い操作を実行しない。押せないようにして待ってもらう
+    if (stale) {
+      btn.disabled = true; sub.textContent = "裏方PCの応答を待っています"; return;
     }
     if (pending) {
       btn.disabled = true; sub.textContent = "送信中…"; return;
