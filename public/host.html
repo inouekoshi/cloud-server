@@ -165,6 +165,7 @@
 <main>
   <section class="card">
     <div class="label">いまの進行</div>
+    <div class="code hidden" id="rehearsal">リハーサル（架空の問題・各チーム2問）</div>
     <div class="state" id="state">—</div>
     <div class="code hidden" id="code-box">出演者の合言葉 <b id="player-code"></b></div>
     <div class="row" id="team-row" style="margin-top:8px">
@@ -332,6 +333,7 @@
     }
 
     el("state").textContent = s.state_label;
+    show("rehearsal", !!s.rehearsal);
     show("code-box", !!s.player_code);
     if (s.player_code) el("player-code").textContent = s.player_code;
 
@@ -392,7 +394,7 @@
     var rows = s.teams.map(function (t) {
       var cur = s.team && s.team.number === t.number && !s.finished;
       return "<tr" + (cur ? ' class="current"' : "") + "><td>" + t.number + ". " + escapeHtml(t.name) +
-        '</td><td class="num">' + t.balloons + '個</td><td class="num">' + t.finished_rounds + "/5</td><td>" + t.status + "</td></tr>";
+        '</td><td class="num">' + t.balloons + '個</td><td class="num">' + t.finished_rounds + "/" + s.rounds_per_team + "</td><td>" + t.status + "</td></tr>";
     });
     el("teams").innerHTML = rows.join("");
   }

@@ -480,8 +480,18 @@
   "17": "3DSで妖怪ウォッチシリーズをプレイしたことがあると答えた人は何パーセント？",
   "18": "ポテトチップスの味の中で、コンソメ味が１番好きと答えた人は何パーセント？",
   "19": "身長が175cm以上あると答えた人は何パーセント？",
-  "20": "将来、自分の子供にも高専に入学してほしい人は何パーセント？"
+  "20": "将来、自分の子供にも高専に入学してほしい人は何パーセント？",
+  "91": "朝ごはんを毎日食べる人の割合は？",
+  "92": "自転車で通学している人の割合は？",
+  "93": "犬より猫が好きな人の割合は？",
+  "94": "休日は昼まで寝ている人の割合は？",
+  "95": "辛い食べ物が苦手な人の割合は？",
+  "96": "毎日湯船につかる人の割合は？",
+  "97": "夏より冬が好きな人の割合は？",
+  "98": "カラオケによく行く人の割合は？"
 };
+  // リハーサル用の問題の ID の範囲 [最初, 最後+1)（questions.py の REHEARSAL_IDS）
+  var REHEARSAL_IDS = [91, 100];
 
   var ROOM = "1364239598";
   var INITIAL_BALLOONS = 100;
@@ -769,7 +779,13 @@
   // 成績は端末の中で数え、正解発表のたびに cloud-server へ送る（rankingApi.js）。
 
   function recordScore(qid, correct, mine) {
-    if (!qid || score.scored[qid]) return;
+    if (!qid) return;
+    // リハーサルと本番の成績は混ぜない。リハーサルで答えた端末で本番に参加しても、0 から数える
+    var rehearsal = qid >= REHEARSAL_IDS[0] && qid < REHEARSAL_IDS[1];
+    if (!!score.rehearsal !== rehearsal) {
+      score = { errorSum: 0, answered: 0, lastQuestion: 0, scored: {}, rehearsal: rehearsal };
+    }
+    if (score.scored[qid]) return;
     score.scored[qid] = true;
     score.lastQuestion = Math.max(score.lastQuestion, qid);
     if (mine !== null) {
