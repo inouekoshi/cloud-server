@@ -126,6 +126,61 @@ describe('contestant answers', () => {
   });
 });
 
+describe('department battle mode (furikaeri)', () => {
+  const battle = (overrides = {}) => ({
+    player_code: null,
+    player_codes: { 1: '1111', 2: '2222', 10: '1010' },
+    player: {
+      mode: 'battle',
+      state: 3,
+      accepting_answer: true,
+      question: { id: 201, text: 'Q' },
+      teams: [{ number: 1, name: 'システム' }, { number: 2, name: '音響' }],
+    },
+    ...overrides,
+  });
+
+  test('an answer is tagged with the team whose code it carries', () => {
+    const store = new HostRelayStore(() => 5);
+    store.setState(battle());
+    store.pushPlayerAnswer({ code: '2222', value: 30, question_id: 201 });
+    store.pushPlayerAnswer({ code: '1010', value: 70, question_id: 201 });
+    expect(store.commandsAfter(0).commands).toEqual([
+      { seq: 1, type: 'answer', value: 30, source: 'player', code: '2222', question_id: 201, at: 5, team: 2 },
+      { seq: 2, type: 'answer', value: 70, source: 'player', code: '1010', question_id: 201, at: 5, team: 10 },
+    ]);
+  });
+
+  test('a wrong code counts toward the lockout', () => {
+    const store = new HostRelayStore(() => 0);
+    store.setState(battle());
+    expect(() => store.pushPlayerAnswer({ code: '0427', value: 1, question_id: 201 })).toThrow('合言葉が違います');
+    expect(store.codeFailures).toHaveLength(1);
+  });
+
+  test('check tells the team name without queuing anything', () => {
+    const store = new HostRelayStore(() => 0);
+    store.setState(battle({ player: { ...battle().player, accepting_answer: false } }));
+    expect(store.checkPlayerCode({ code: '2222' })).toEqual({ team: 2, name: '音響' });
+    expect(() => store.checkPlayerCode({ code: '9999' })).toThrow('合言葉が違います');
+    expect(store.commandsAfter(0).commands).toHaveLength(0);
+  });
+
+  test('host commands for the battle mode', () => {
+    const store = new HostRelayStore(() => 1);
+    store.pushCommand({ type: 'set_active', team: 3, active: false });
+    store.pushCommand({ type: 'close', expect_state: 3 });
+    store.pushCommand({ type: 'answer', team: 4, value: 12 });
+    expect(store.commandsAfter(0).commands).toEqual([
+      { seq: 1, type: 'set_active', team: 3, active: false, at: 1 },
+      { seq: 2, type: 'close', expect_state: 3, at: 1 },
+      { seq: 3, type: 'answer', team: 4, value: 12, at: 1 },
+    ]);
+    expect(() => store.pushCommand({ type: 'set_active', team: 3 })).toThrow();
+    expect(() => store.pushCommand({ type: 'answer', team: 0, value: 1 })).toThrow();
+  });
+});
+
 test('tokenMatches', () => {
   expect(tokenMatches('secret', 'secret')).toBe(true);
   expect(tokenMatches('secreT', 'secret')).toBe(false);

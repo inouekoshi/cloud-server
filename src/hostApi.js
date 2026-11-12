@@ -33,7 +33,9 @@ const { RankingStore, RankingError } = require('./rankingApi');
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_COMMANDS = 100;
 // 'resync' asks the PC to resend the current state to Scratch (after Scratch is reloaded).
-const COMMAND_TYPES = ['next', 'answer', 'resync'];
+// 'close' and 'set_active' are for the department battle mode (furikaeri, 2026-12):
+// close the answers with some teams missing / switch a team in or out before the start.
+const COMMAND_TYPES = ['next', 'answer', 'resync', 'close', 'set_active'];
 
 // Brute-force protection for the contestant code: after too many wrong codes
 // in a short time, refuse every attempt for a while.
@@ -79,9 +81,17 @@ class HostRelayStore {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       throw new Error('invalid command');
     }
-    const { type, value, expect_state: expectState, client_id: clientId } = /** @type {any} */ (body);
+    const {
+      type, value, expect_state: expectState, client_id: clientId, team, active,
+    } = /** @type {any} */ (body);
     if (!COMMAND_TYPES.includes(type)) {
       throw new Error('invalid command type');
+    }
+    if (team !== undefined && team !== null && !(Number.isInteger(team) && team >= 1 && team <= 99)) {
+      throw new Error('invalid team');
+    }
+    if (type === 'set_active' && (!Number.isInteger(team) || typeof active !== 'boolean')) {
+      throw new Error('set_active needs team and active');
     }
     if (type === 'answer' && !(Number.isInteger(value) && value >= 0 && value <= 100)) {
       throw new Error('answer must be an integer between 0 and 100');
@@ -99,6 +109,8 @@ class HostRelayStore {
     this.seq += 1;
     const command = { seq: this.seq, type, at: this.now() };
     if (type === 'answer') command.value = value;
+    if (Number.isInteger(team)) command.team = team;
+    if (type === 'set_active') command.active = active;
     if (Number.isInteger(expectState)) command.expect_state = expectState;
     this.commands.push(command);
     if (this.commands.length > MAX_COMMANDS) {
@@ -155,15 +167,7 @@ class HostRelayStore {
     if (!(Number.isInteger(value) && value >= 0 && value <= 100)) {
       throw new PlayerAnswerError(400, '回答は0〜100の整数で入力してください');
     }
-    if (!state.player_code || !tokenMatches(code, state.player_code)) {
-      this.codeFailures = this.codeFailures.filter((t) => now - t < CODE_FAILURE_WINDOW_MS);
-      this.codeFailures.push(now);
-      if (this.codeFailures.length >= MAX_CODE_FAILURES) {
-        this.codeLockedUntil = now + CODE_LOCKOUT_MS;
-        this.codeFailures = [];
-      }
-      throw new PlayerAnswerError(403, '合言葉が違います。司会に確認してください');
-    }
+    const team = this.matchCode(code);
     if (!state.player.accepting_answer) {
       throw new PlayerAnswerError(409, 'いまは回答を受け付けていません');
     }
@@ -172,7 +176,8 @@ class HostRelayStore {
     }
 
     this.seq += 1;
-    this.commands.push({
+    /** @type {Record<string, unknown>} */
+    const command = {
       seq: this.seq,
       type: 'answer',
       value,
@@ -180,11 +185,61 @@ class HostRelayStore {
       code,
       question_id: questionId,
       at: now,
-    });
+    };
+    if (team !== null) command.team = team; // battle mode: which department sent it
+    this.commands.push(command);
     if (this.commands.length > MAX_COMMANDS) {
       this.commands.shift();
     }
     return this.seq;
+  }
+
+  /**
+   * Find whose code this is. Wrong codes are counted for the brute-force lockout.
+   * In the department battle mode the PC sends `player_codes` (team number -> code)
+   * and every team answers at once; otherwise only the current team's `player_code` is valid.
+   * @param {unknown} code
+   * @returns {number | null} the team number in the battle mode, null otherwise
+   */
+  matchCode(code) {
+    const now = this.now();
+    if (now < this.codeLockedUntil) {
+      throw new PlayerAnswerError(429, '合言葉の間違いが続いたため、しばらく受け付けを止めています。少し待ってからもう一度送ってください');
+    }
+    const state = /** @type {any} */ (this.state);
+    const codes = state && state.player_codes;
+    if (codes && typeof codes === 'object') {
+      for (const [team, expected] of Object.entries(codes)) {
+        if (typeof expected === 'string' && tokenMatches(code, expected)) {
+          return Number(team);
+        }
+      }
+    } else if (state && state.player_code && tokenMatches(code, state.player_code)) {
+      return null;
+    }
+    this.codeFailures = this.codeFailures.filter((t) => now - t < CODE_FAILURE_WINDOW_MS);
+    this.codeFailures.push(now);
+    if (this.codeFailures.length >= MAX_CODE_FAILURES) {
+      this.codeLockedUntil = now + CODE_LOCKOUT_MS;
+      this.codeFailures = [];
+    }
+    throw new PlayerAnswerError(403, '合言葉が違います。司会に確認してください');
+  }
+
+  /**
+   * Tell a team's phone which team its code belongs to, before it answers.
+   * @param {unknown} body
+   */
+  checkPlayerCode(body) {
+    const state = /** @type {any} */ (this.state);
+    if (!state || !state.player) {
+      throw new PlayerAnswerError(503, '進行を管理するPCがまだつながっていません');
+    }
+    const code = body && typeof body === 'object' ? /** @type {any} */ (body).code : undefined;
+    const team = this.matchCode(code);
+    const teams = Array.isArray(state.player.teams) ? state.player.teams : [];
+    const found = team === null ? null : teams.find((t) => t && t.number === team);
+    return { team, name: found ? found.name : null };
   }
 
   getPlayerState() {
@@ -364,9 +419,11 @@ function createHostApi({ token, store = new HostRelayStore(), ranking = undefine
     const route = `${req.method} ${pathname}`;
     if (route === 'GET /api/player/state') {
       sendJson(res, 200, store.getPlayerState());
-    } else if (route === 'POST /api/player/answer') {
+    } else if (route === 'POST /api/player/answer' || route === 'POST /api/player/check') {
       readJson(req)
-        .then((body) => sendJson(res, 200, { seq: store.pushPlayerAnswer(body) }))
+        .then((body) => sendJson(res, 200, route === 'POST /api/player/check'
+          ? store.checkPlayerCode(body)
+          : { seq: store.pushPlayerAnswer(body) }))
         .catch((e) => {
           if (e instanceof PlayerAnswerError) {
             sendJson(res, e.status, { error: e.message });
