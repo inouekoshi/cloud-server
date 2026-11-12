@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#111827">
+<title>スズリーグ 部門の回答ページ</title>
+<!--
+  部門対抗モード（振り返り会 2026-12-03）の回答ページ。各部門の入力係が自分のスマホで開き、
+  部門の4桁の合言葉を入れて%を回答する。合言葉で部門が決まる。
+  Render（cloud-server の public/furikaeri.html）から配信する。元ファイルは src/suzuleague/furikaeri.html。
+  書き出しは uv run python -m suzuleague.publish。設計は docs/furikaeri/design.md の「回答ページ」。
+-->
+<style>
+  :root {
+    --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #db2777; --accent-text: #ffffff; --key: #ffffff; --ok: #15803d; --ng: #b91c1c;
+    --gold: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1020; --card: #161c2e; --text: #f3f4f6; --muted: #9ca3af; --line: #263049;
+      --accent: #ec4899; --key: #1f2740; --ok: #4ade80; --ng: #f87171; --gold: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 16px; line-height: 1.5; -webkit-text-size-adjust: 100%;
+    padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 0 4px; }
+  header h1 { font-size: 15px; margin: 0; color: var(--muted); font-weight: 600; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; flex: none;
+    padding: 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line);
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill[data-kind="ok"] .dot { background: var(--ok); }
+  .pill[data-kind="ng"] .dot { background: var(--ng); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; }
+  .label { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .team-name { font-size: 20px; font-weight: 800; overflow-wrap: anywhere; }
+  .balloons { text-align: right; white-space: nowrap; }
+  .balloons b { font-size: 30px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .question { font-size: 19px; font-weight: 700; margin: 6px 0 0; overflow-wrap: anywhere; }
+  .big { font-size: 22px; font-weight: 800; margin: 4px 0; }
+  .muted { color: var(--muted); }
+  .hidden { display: none !important; }
+  .readout { text-align: center; font-size: 64px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; margin: 4px 0; }
+  .readout small { font-size: 28px; margin-left: 4px; color: var(--muted); }
+  .readout.empty { color: var(--muted); }
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .keys button {
+    min-height: 58px; font-size: 26px; font-weight: 700; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--key); color: var(--text); touch-action: manipulation;
+  }
+  .keys button.sub { font-size: 17px; color: var(--muted); }
+  .send {
+    width: 100%; min-height: 64px; margin-top: 12px; border: 0; border-radius: 14px;
+    background: var(--accent); color: var(--accent-text); font-size: 20px; font-weight: 800; touch-action: manipulation;
+  }
+  .send:disabled { opacity: .4; }
+  .status { text-align: center; margin-top: 10px; min-height: 24px; font-weight: 700; }
+  .status[data-kind="ok"] { color: var(--ok); }
+  .status[data-kind="ng"] { color: var(--ng); }
+  .result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 8px; }
+  .result div { background: var(--bg); border-radius: 10px; padding: 8px 4px; }
+  .result b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  td { padding: 7px 2px; border-top: 1px solid var(--line); }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.me td { font-weight: 800; color: var(--accent); }
+  .code-form input {
+    width: 100%; min-height: 64px; font-size: 36px; text-align: center; letter-spacing: .3em;
+    border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); margin: 10px 0;
+  }
+  .code-form button, .link {
+    width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: var(--accent);
+    color: var(--accent-text); font-size: 18px; font-weight: 800;
+  }
+  .link { background: none; color: var(--muted); font-size: 14px; font-weight: 600; min-height: 40px; text-decoration: underline; }
+</style>
+</head>
+<body>
+<header>
+  <h1>スズリーグ 部門対抗</h1>
+  <span id="conn" class="pill"><span class="dot"></span><span id="conn-text">接続中…</span></span>
+</header>
+
+<form id="code-form" class="card code-form hidden">
+  <div class="big">部門の合言葉</div>
+  <div class="muted">カードに書いてある6桁の数字を入れてください。</div>
+  <input id="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="000000">
+  <button type="submit">はじめる</button>
+  <div id="code-status" class="status" data-kind="ng"></div>
+</form>
+
+<div id="game" class="hidden">
+  <div class="card row">
+    <div><div class="label">あなたの部門</div><div id="team-name" class="team-name"></div></div>
+    <div class="balloons"><div class="label">残りバルーン</div><b id="balloons">100</b></div>
+  </div>
+
+  <div id="msg" class="card">
+    <div id="m-title" class="big"></div>
+    <div id="m-body" class="muted"></div>
+    <div id="m-question" class="question hidden"></div>
+  </div>
+
+  <div id="answer-card" class="card hidden">
+    <div class="label" id="a-round"></div>
+    <div id="a-question" class="question"></div>
+    <div id="readout" class="readout empty">--<small>%</small></div>
+    <div class="keys" id="keys">
+      <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+      <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+      <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+      <button data-k="C" class="sub">消す</button><button data-k="0">0</button><button data-k="B" class="sub">1字戻す</button>
+    </div>
+    <button id="send" class="send" disabled>この数字で回答する</button>
+    <div id="a-status" class="status"></div>
+  </div>
+
+  <div id="result-card" class="card hidden">
+    <div class="label" id="r-title"></div>
+    <div class="result">
+      <div><span class="label">予想</span><b id="r-answer">-</b></div>
+      <div><span class="label">正解</span><b id="r-correct">-</b></div>
+      <div><span class="label">割れた</span><b id="r-damage">-</b></div>
+    </div>
+  </div>
+
+  <div id="rank-card" class="card hidden">
+    <div class="label">順位</div>
+    <table><tbody id="rank-rows"></tbody></table>
+  </div>
+
+  <button id="change-code" class="link">部門の合言葉を入れ直す</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var POLL_MS = 1000;
+  var STALE_SEC = 8;
+  var CODE_KEY = "suzuleague-furikaeri-code";
+  var STATE = { IDLE: 0, QUESTION: 2, ANSWERING: 3, REVEAL: 4, ROUND_RESULT: 5, FINISHED: 8, OPEN: 9 };
+
+  var el = function (id) { return document.getElementById(id); };
+  var code = "";
+  var team = null;          // {team, name}
+  var current = null;
+  var typed = "";           // テンキーで入れている数字
+  var typedFor = null;      // どの問題のために入れているか（問題が変わったら消す）
+  var sent = null;          // この問題に送った数字 {qid, value}
+  var sending = false;
+  var checking = false;     // 保存してあった合言葉を確かめているところ
+
+  try { code = localStorage.getItem(CODE_KEY) || ""; } catch (e) { /* 保存できない環境 */ }
+
+  function setConn(kind, text) { el("conn").setAttribute("data-kind", kind); el("conn-text").textContent = text; }
+  function show(id, visible) { el(id).classList.toggle("hidden", !visible); }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function postJson(path, body) {
+    return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || ("送れませんでした（HTTP " + res.status + "）"));
+          return data;
+        });
+      });
+  }
+
+  // ---- 合言葉 ----------------------------------------------------------
+
+  function checkCode(c) {
+    return postJson("api/player/check", { code: c }).then(function (data) {
+      if (!data.team) throw new Error("いまは部門対抗モードではありません");
+      code = c;
+      team = data;
+      try { localStorage.setItem(CODE_KEY, c); } catch (e) { /* 保存できない環境 */ }
+      render(current);
+    });
+  }
+
+  el("code-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var c = el("code-input").value.trim();
+    if (!/^\d{6}$/.test(c)) { el("code-status").textContent = "6桁の数字を入れてください"; return; }
+    el("code-status").textContent = "";
+    checkCode(c).catch(function (e) { el("code-status").textContent = e.message; });
+  });
+
+  el("change-code").addEventListener("click", function () {
+    code = ""; team = null; sent = null;
+    try { localStorage.removeItem(CODE_KEY); } catch (e) { /* 保存できない環境 */ }
+    el("code-input").value = "";
+    render(current);
+  });
+
+  // ---- テンキー --------------------------------------------------------
+
+  el("keys").addEventListener("click", function (ev) {
+    var k = ev.target && ev.target.getAttribute("data-k");
+    if (!k) return;
+    if (k === "C") typed = "";
+    else if (k === "B") typed = typed.slice(0, -1);
+    else if (typed.length < 3) {
+      var next = typed === "0" ? k : typed + k;
+      if (Number(next) <= 100) typed = next;
+    }
+    drawReadout();
+  });
+
+  function drawReadout() {
+    var r = el("readout");
+    r.classList.toggle("empty", typed === "");
+    r.innerHTML = (typed === "" ? "--" : typed) + "<small>%</small>";
+    var s = current;
+    el("send").disabled = typed === "" || sending || !s || s.state !== STATE.ANSWERING;
+  }
+
+  el("send").addEventListener("click", function () {
+    var s = current;
+    if (!s || !s.question || typed === "") return;
+    var value = Number(typed), qid = s.question.id;
+    sending = true; drawReadout();
+    el("a-status").textContent = "送っています…"; el("a-status").dataset.kind = "";
+    postJson("api/player/answer", { code: code, value: value, question_id: qid })
+      .then(function () {
+        // サーバは預かった時点で返事をする。進行のPCが受け付けたかは、次の状態で確かめる
+        sent = { qid: qid, value: value, at: Date.now() };
+        el("a-status").dataset.kind = "";
+        el("a-status").textContent = value + "% を送りました。届いたか確かめています…";
+      })
+      .catch(function (e) { el("a-status").dataset.kind = "ng"; el("a-status").textContent = e.message; })
+      .then(function () { sending = false; drawReadout(); });
+  });
+
+  // ---- 状態 ------------------------------------------------------------
+
+  function poll() {
+    fetch("api/player/state", { cache: "no-store" })
+      .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+      .then(function (data) {
+        if (!data.state) setConn("ng", "準備中");
+        else if (data.age > STALE_SEC) setConn("ng", "進行が止まっています");
+        else setConn("ok", "接続中");
+        render(data.state);
+      })
+      .catch(function () { setConn("ng", "つながりません"); });
+  }
+
+  function message(title, body, questionText) {
+    el("m-title").textContent = title;
+    el("m-body").textContent = body || "";
+    el("m-question").textContent = questionText || "";
+    show("m-question", !!questionText);
+  }
+
+  function render(s) {
+    current = s;
+    var needCode = !code || !team;
+    show("code-form", needCode);
+    show("game", !needCode);
+    if (needCode) {
+      // 保存してある合言葉は、PCがつながってから確かめ直す
+      if (code && !team && !checking && s && s.mode === "battle") {
+        checking = true;
+        checkCode(code)
+          .catch(function (e) { code = ""; el("code-status").textContent = e.message; render(current); })
+          .then(function () { checking = false; });
+      }
+      return;
+    }
+    el("team-name").textContent = team.name;
+    var mine = s && s.teams ? s.teams.filter(function (t) { return t.number === team.team; })[0] : null;
+    el("balloons").textContent = mine ? mine.balloons : "-";
+
+    show("answer-card", false); show("result-card", false); show("rank-card", false); show("msg", true);
+    if (!s) { message("準備中", "進行を管理するPCを待っています。"); return; }
+    if (s.mode !== "battle") { message("いまは部門対抗モードではありません", "司会の案内を待ってください。"); return; }
+    if (!mine) { message("この部門は不参加になっています", "参加するときは司会に伝えてください。"); return; }
+
+    var q = s.question ? s.question.text : "";
+    var qid = s.question ? s.question.id : null;
+    if (typedFor !== qid) { typed = ""; typedFor = qid; el("a-status").textContent = ""; }
+    if (sent && sent.qid !== qid) sent = null;
+
+    if (s.state === STATE.IDLE) {
+      message("まもなく始まります", "全" + s.rounds + "問。問題が出たら、部門で相談して%を入れてください。");
+    } else if (s.state === STATE.QUESTION) {
+      message("第" + s.round + "問", "問題をよく聞いてください。もうすぐ回答できます。", q);
+    } else if (s.state === STATE.ANSWERING) {
+      show("msg", false); show("answer-card", true);
+      el("a-round").textContent = "第" + s.round + "問 / " + s.rounds + (mine.eliminated ? "（脱落中。答えてもバルーンは減りません）" : "");
+      el("a-question").textContent = q;
+      if (sent && !sending) {
+        if (mine.answered && Date.now() - sent.at > 1500) {
+          el("a-status").dataset.kind = "ok";
+          el("a-status").textContent = sent.value + "% で回答しました（締め切りまでは直せます）";
+        } else if (Date.now() - sent.at > 8000) {
+          el("a-status").dataset.kind = "ng";
+          el("a-status").textContent = "回答が届いていないかもしれません。もう一度送るか、司会に伝えてください";
+        }
+      }
+      drawReadout();
+    } else if (s.state === STATE.OPEN) {
+      var body = mine.answer === null ? "この問題は未回答でした（予想50とみなします）" : "あなたの部門の予想は " + mine.answer + "%。大画面を見てください。";
+      if (sent && sent.qid === qid && mine.answer !== sent.value) {
+        body += "（最後に送った " + sent.value + "% は締め切りに間に合いませんでした）";
+      }
+      message("予想オープン！", body, q);
+    } else if (s.state === STATE.REVEAL || s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) {
+      show("msg", s.state === STATE.FINISHED);
+      if (s.state === STATE.FINISHED) {
+        var won = s.winners.some(function (w) { return w.number === team.team; });
+        message(won ? "優勝おめでとうございます！" : "最終結果", "あなたの部門は " + mine.rank + " 位でした。");
+      }
+      if (mine.error !== null && mine.error !== undefined) {
+        show("result-card", true);
+        el("r-title").textContent = "第" + s.round + "問の結果";
+        el("r-answer").textContent = mine.answer === null ? "―" : mine.answer + "%";
+        el("r-correct").textContent = s.correct + "%";
+        el("r-damage").textContent = mine.damage;
+      }
+      if (s.state !== STATE.REVEAL) {
+        show("rank-card", true);
+        var teams = s.teams.slice().sort(function (a, b) { return (a.rank - b.rank) || (a.number - b.number); });
+        el("rank-rows").innerHTML = teams.map(function (t) {
+          return '<tr class="' + (t.number === team.team ? "me" : "") + '"><td class="num">' + t.rank + "位</td><td>" +
+            esc(t.name) + (t.eliminated ? "（脱落）" : "") + '</td><td class="num">' + t.balloons + "</td></tr>";
+        }).join("");
+      }
+    }
+  }
+
+  poll();
+  setInterval(poll, POLL_MS);
+})();
+</script>
+</body>
+</html>

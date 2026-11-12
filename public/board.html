@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>スズリーグ 部門対抗</title>
+<!--
+  部門対抗モード（振り返り会 2026-12-03）の大画面。プロジェクターに映す、入力のない画面。
+  Render（cloud-server の public/board.html）から配信し、1秒ごとに公開用の状態（api/player/state）を読む。
+  元ファイルは suzuleague リポジトリの src/suzuleague/board.html。書き出しは uv run python -m suzuleague.publish。
+  設計は docs/furikaeri/design.md の「大画面ページ」。
+-->
+<style>
+  :root {
+    --bg: #0a0f1f;
+    --bg2: #121a33;
+    --card: #17203d;
+    --card-line: #2a3762;
+    --text: #f5f7ff;
+    --muted: #9aa6cc;
+    --accent: #ff4fa3;      /* バルーン */
+    --accent2: #ffd23f;     /* 正解・優勝 */
+    --ok: #4ade80;
+    --out: #5b647f;
+    --damage: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(120% 90% at 50% 0%, var(--bg2), var(--bg) 70%);
+    color: var(--text);
+    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    height: 100vh; width: 100vw;
+    padding: 2.2vh 2.4vw 2.6vh;
+    gap: 2vh;
+  }
+
+  /* ---- 上部（タイトル・問題・正解） ---- */
+  .top { display: flex; flex-direction: column; gap: 1.2vh; min-height: 27vh; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
+  .brand { font-size: 2.4vh; font-weight: 800; letter-spacing: .12em; color: var(--muted); }
+  .brand b { color: var(--accent); }
+  .round {
+    font-size: 2.6vh; font-weight: 800; padding: .5vh 1.4vw; border-radius: 99px;
+    background: rgba(255,255,255,.08);
+  }
+  .tag {
+    font-size: 2vh; font-weight: 800; padding: .4vh 1vw; border-radius: 6px;
+    background: var(--accent2); color: #1b1300; margin-left: 1vw;
+  }
+  .main-line {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 3vw;
+    text-align: center;
+  }
+  .question {
+    font-size: 5.2vh; font-weight: 800; line-height: 1.35; max-width: 88vw;
+    text-wrap: balance;
+  }
+  .question.small { font-size: 3.6vh; color: var(--muted); }
+  .correct {
+    display: flex; align-items: baseline; gap: 1.2vw; white-space: nowrap;
+    animation: pop .5s cubic-bezier(.2,1.6,.4,1);
+  }
+  .correct span { font-size: 4vh; font-weight: 800; color: var(--muted); }
+  .correct b { font-size: 15vh; line-height: 1; font-weight: 900; color: var(--accent2); font-variant-numeric: tabular-nums; }
+  .correct b small { font-size: 7vh; }
+  .headline { font-size: 7vh; font-weight: 900; letter-spacing: .04em; }
+  .headline.win { color: var(--accent2); font-size: 8.5vh; animation: pop .6s cubic-bezier(.2,1.6,.4,1); }
+  .rules { font-size: 3.2vh; line-height: 1.7; color: var(--muted); text-align: left; }
+  .rules b { color: var(--text); }
+  .status-line { text-align: center; font-size: 3vh; font-weight: 700; color: var(--muted); }
+  .status-line b { color: var(--text); }
+
+  /* ---- 部門のカード ---- */
+  .grid { flex: 1; display: flex; flex-direction: column; gap: 2vh; justify-content: center; }
+  .row { display: flex; gap: 1.4vw; justify-content: center; flex: 1; max-height: 31vh; }
+  .card {
+    position: relative; width: 17.6vw; border-radius: 1.6vh;
+    background: var(--card); border: .3vh solid var(--card-line);
+    padding: 1.6vh .9vw 1.4vh; display: flex; flex-direction: column; gap: .8vh;
+    transition: transform .6s, opacity .4s, border-color .3s, background .3s;
+    overflow: hidden;
+  }
+  .card.answered { border-color: var(--ok); }
+  .card.out { background: #141a2c; border-color: #232a40; }
+  .card.out .name, .card.out .count { color: var(--out); }
+  .card.top1 { border-color: var(--accent2); box-shadow: 0 0 3vh rgba(255,210,63,.35); }
+  .head { display: flex; align-items: baseline; gap: .6vw; }
+  .name {
+    flex: 1; min-width: 0; font-size: 2.7vh; font-weight: 800; line-height: 1.2; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .rank { flex: none; font-size: 2.3vh; font-weight: 900; color: var(--muted); }
+  .card.top1 .rank { color: var(--accent2); }
+  .count {
+    font-size: 7.4vh; font-weight: 900; line-height: 1; color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .count small { font-size: 2.4vh; color: var(--muted); font-weight: 700; margin-left: .3vw; }
+  .meter { height: 1.4vh; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .meter i {
+    display: block; height: 100%; border-radius: 99px; background: var(--accent);
+    transition: width .25s linear;
+  }
+  .card.out .meter i { background: var(--out); }
+  .slot {
+    margin-top: auto; min-height: 6.4vh; border-radius: 1vh; background: rgba(255,255,255,.05);
+    display: flex; align-items: center; justify-content: center; gap: .8vw;
+    font-size: 2.6vh; font-weight: 700; color: var(--muted);
+  }
+  .slot.done { color: var(--ok); }
+  .slot .guess { font-size: 5vh; font-weight: 900; color: var(--text); font-variant-numeric: tabular-nums; }
+  .slot .guess small { font-size: 2.6vh; }
+  .slot .dmg { font-size: 3.4vh; font-weight: 900; color: var(--damage); font-variant-numeric: tabular-nums; }
+  .slot .dmg.zero { color: var(--accent2); font-size: 2.8vh; white-space: nowrap; }
+  .slot .note { font-size: 2.4vh; white-space: nowrap; }
+  .slot .note b { color: var(--damage); font-size: 3vh; }
+  .slot.flip { animation: flip .5s ease-out backwards; }
+  .badge {
+    position: absolute; inset: auto 0 0 0; text-align: center; padding: .4vh 0;
+    font-size: 2vh; font-weight: 800; background: #2b2f3f; color: #c7cbe0; letter-spacing: .2em;
+  }
+
+  .conn {
+    position: fixed; right: 1vw; bottom: .8vh; font-size: 1.6vh; color: var(--muted); opacity: .6;
+  }
+  .conn[data-kind="ng"] { color: var(--damage); opacity: 1; }
+  .empty { margin: auto; font-size: 4vh; color: var(--muted); }
+
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes flip { from { transform: rotateX(90deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<section class="top">
+  <div class="bar">
+    <div class="brand"><b>スズリーグ</b> 部門対抗<span id="tag" class="tag" hidden>リハーサル</span></div>
+    <div id="round" class="round" hidden></div>
+  </div>
+  <div id="main" class="main-line"></div>
+  <div id="status" class="status-line"></div>
+</section>
+<section id="grid" class="grid"></section>
+<div id="conn" class="conn">接続中…</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var POLL_MS = 1000;
+  var STALE_SEC = 8;
+  var REVEAL_COUNT_MS = 3000;   // 正解発表でバルーンを数え下げる長さ（battle_host.BATTLE_REVEAL_HOLD より短く）
+  var STATE = { IDLE: 0, QUESTION: 2, ANSWERING: 3, REVEAL: 4, ROUND_RESULT: 5, FINISHED: 8, OPEN: 9 };
+
+  var el = function (id) { return document.getElementById(id); };
+  var lastKey = null;      // 状態と問題番号。変わったときだけ組み立て直す
+  var countStart = null;   // 正解発表の数え下げを始めた時刻
+  var current = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function poll() {
+    fetch("api/player/state", { cache: "no-store" })
+      .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
+      .then(function (data) {
+        var c = el("conn");
+        if (!data.state) { c.dataset.kind = "ng"; c.textContent = "進行を管理するPCを待っています"; }
+        else if (data.age > STALE_SEC) { c.dataset.kind = "ng"; c.textContent = "進行が止まっています（" + Math.round(data.age) + "秒）"; }
+        else { c.dataset.kind = "ok"; c.textContent = "接続中"; }
+        render(data.state);
+      })
+      .catch(function () { var c = el("conn"); c.dataset.kind = "ng"; c.textContent = "サーバにつながりません"; });
+  }
+
+  // ---- 上部 ------------------------------------------------------------
+
+  function renderTop(s) {
+    el("tag").hidden = !s.rehearsal;
+    var round = el("round");
+    round.hidden = !s.round;
+    round.textContent = "第" + s.round + "問 / " + s.rounds;
+    var q = s.question ? esc(s.question.text) : "";
+    var main = "", status = "";
+
+    if (s.state === STATE.IDLE) {
+      main = '<div class="rules">' +
+        "全部門が同じ問題に同時に答えます（全" + s.rounds + "問）<br>" +
+        "外れた差の分だけ <b>バルーンが割れる</b>。持ち点は <b>100</b><br>" +
+        "最後に <b>残りバルーンが一番多い部門</b> が優勝！</div>";
+      status = "参加 " + s.teams.length + " 部門";
+    } else if (s.state === STATE.QUESTION) {
+      main = '<div class="question">' + q + "</div>";
+      status = "問題をよく聞いてください";
+    } else if (s.state === STATE.ANSWERING) {
+      main = '<div class="question">' + q + "</div>";
+      var done = s.teams.filter(function (t) { return t.answered; }).length;
+      status = "回答受付中　<b>" + done + " / " + s.teams.length + "</b> 部門が回答済み";
+    } else if (s.state === STATE.OPEN) {
+      main = '<div class="question">' + q + "</div>";
+      status = "<b>予想オープン！</b>　正解は…？";
+    } else if (s.state === STATE.REVEAL) {
+      main = '<div class="question small">' + q + '</div><div class="correct"><span>正解</span><b>' +
+        s.correct + "<small>%</small></b></div>";
+    } else if (s.state === STATE.ROUND_RESULT) {
+      main = '<div class="headline">第' + s.round + "問 終了　途中順位</div>";
+      status = s.round < s.rounds ? "あと " + (s.rounds - s.round) + " 問" : "次は最終結果！";
+    } else if (s.state === STATE.FINISHED) {
+      var names = s.winners.map(function (w) { return esc(w.name); }).join("・");
+      main = names ? '<div class="headline win">優勝　' + names + "！</div>" : '<div class="headline">最終結果</div>';
+      status = "おつかれさまでした";
+    }
+    el("main").innerHTML = main;
+    el("status").innerHTML = status;
+  }
+
+  // ---- 部門のカード ----------------------------------------------------
+
+  function ordered(s) {
+    var teams = s.teams.slice();
+    if (s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) {
+      teams.sort(function (a, b) { return (a.rank - b.rank) || (a.number - b.number); });
+    }
+    return teams;
+  }
+
+  function slot(s, t) {
+    if (s.state === STATE.ANSWERING) {
+      if (t.answered) return '<div class="slot done">✓ 回答済み</div>';
+      return '<div class="slot">' + (t.eliminated ? "（脱落）" : "考え中…") + "</div>";
+    }
+    var opened = s.state === STATE.OPEN || s.state === STATE.REVEAL;
+    if ((s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) && t.damage !== null && t.damage !== undefined) {
+      return '<div class="slot"><span class="note">第' + s.round + "問 " +
+        (t.damage > 0 ? "<b>−" + t.damage + "</b>" : (t.error === 0 ? "ぴったり" : "±0")) + "</span></div>";
+    }
+    if (!opened) return '<div class="slot"></div>';
+    var guess = t.answer === null || t.answer === undefined
+      ? '<span class="guess">―</span>'
+      : '<span class="guess">' + t.answer + "<small>%</small></span>";
+    var dmg = "";
+    if (s.state === STATE.REVEAL && t.damage !== null && t.damage !== undefined) {
+      if (t.damage > 0) dmg = '<span class="dmg">−' + t.damage + "</span>";
+      else if (t.error === 0) dmg = '<span class="dmg zero">ぴったり!</span>';
+      else dmg = '<span class="dmg zero">±0</span>';  // 脱落済みで減らない
+    }
+    return '<div class="slot flip">' + guess + dmg + "</div>";
+  }
+
+  function card(s, t) {
+    var cls = ["card"];
+    if (s.state === STATE.ANSWERING && t.answered) cls.push("answered");
+    // 正解発表では、数え下げが0に届いたときに灰色にする（tick）
+    if (t.eliminated && s.state !== STATE.REVEAL) cls.push("out");
+    var ranked = s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED;
+    if (ranked && t.rank === 1) cls.push("top1");
+    var start = displayedBalloons(s, t);
+    return '<div class="' + cls.join(" ") + '" data-team="' + t.number + '">' +
+      '<div class="head"><div class="name">' + esc(t.name) + "</div>" +
+      (ranked ? '<div class="rank">' + t.rank + "位</div>" : "") + "</div>" +
+      '<div class="count"><span class="n">' + start + "</span><small>個</small></div>" +
+      '<div class="meter"><i style="width:' + start + '%"></i></div>' +
+      slot(s, t) +
+      (t.eliminated && s.state !== STATE.REVEAL ? '<div class="badge">脱落</div>' : "") +
+      "</div>";
+  }
+
+  // 正解発表のあいだは、発表前の数から今の数へ数え下げる
+  function displayedBalloons(s, t) {
+    if (s.state !== STATE.REVEAL || countStart === null || !t.damage) return t.balloons;
+    var p = Math.min(1, (performance.now() - countStart) / REVEAL_COUNT_MS);
+    var eased = 1 - Math.pow(1 - p, 3);
+    return Math.round(t.balloons + t.damage * (1 - eased));
+  }
+
+  function renderGrid(s) {
+    var teams = ordered(s);
+    if (!teams.length) { el("grid").innerHTML = '<div class="empty">参加する部門がありません</div>'; return; }
+    // 2段に分ける（10なら5と5、9なら5と4、7なら4と3）。1段に5枚まで
+    var rows = teams.length <= 5 ? [teams] : [teams.slice(0, Math.ceil(teams.length / 2)), teams.slice(Math.ceil(teams.length / 2))];
+    el("grid").innerHTML = rows.map(function (row) {
+      return '<div class="row">' + row.map(function (t) { return card(s, t); }).join("") + "</div>";
+    }).join("");
+  }
+
+  // 数字と横棒だけを書き換える（カードを作り直すとめくりの動きがやり直しになる）
+  function tick() {
+    var s = current;
+    if (s && s.state === STATE.REVEAL && countStart !== null) {
+      s.teams.forEach(function (t) {
+        var node = document.querySelector('.card[data-team="' + t.number + '"]');
+        if (!node) return;
+        var n = displayedBalloons(s, t);
+        node.querySelector(".n").textContent = n;
+        node.querySelector(".meter i").style.width = n + "%";
+        if (t.eliminated && n === 0) node.classList.add("out");
+      });
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function render(s) {
+    if (!s) { current = null; lastKey = null; el("grid").innerHTML = ""; el("main").innerHTML = '<div class="question small">まもなく始まります</div>'; return; }
+    if (s.mode !== "battle") {
+      el("grid").innerHTML = '<div class="empty">いまは部門対抗モードではありません</div>';
+      el("main").innerHTML = ""; el("status").textContent = ""; return;
+    }
+    var key = s.state + ":" + s.round;
+    var answered = s.teams.map(function (t) { return t.answered ? 1 : 0; }).join("");
+    var fresh = key !== lastKey;
+    if (fresh && s.state === STATE.REVEAL) countStart = performance.now();
+    if (fresh) countStart = s.state === STATE.REVEAL ? countStart : null;
+    current = s;
+    // 回答受付中は回答済みの印だけが変わるので、変わったときに描き直す
+    var sig = key + "|" + answered + "|" + s.teams.length + "|" + s.teams.map(function (t) { return t.number; }).join(",");
+    if (fresh || sig !== render.sig) {
+      renderTop(s);
+      renderGrid(s);
+      render.sig = sig;
+    }
+    lastKey = key;
+  }
+
+  poll();
+  setInterval(poll, POLL_MS);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

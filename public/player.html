@@ -283,6 +283,8 @@
         return res.json();
       })
       .then(function (data) {
+        // 部門対抗モード（振り返り会）は部門の回答ページで答える
+        if (data.state && data.state.mode === "battle") { location.replace("furikaeri.html"); return; }
         if (!data.state) setConn("ng", "準備中");
         else if (data.age > STALE_SEC) setConn("ng", "進行が止まっています");
         else setConn("ok", "接続中");

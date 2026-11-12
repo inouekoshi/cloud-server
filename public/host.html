@@ -310,6 +310,8 @@
           render(null);
           return;
         }
+        // 部門対抗モード（振り返り会）は別の司会者画面で操作する
+        if (data.state.mode === "battle") { location.replace("furikaeri-host.html"); return; }
         stale = data.age > STALE_SEC;
         if (stale) setConn("ng", "PCの応答なし（" + Math.round(data.age) + "秒）");
         else setConn("ok", "PCと接続中");
