@@ -129,41 +129,41 @@ describe('contestant answers', () => {
 describe('department battle mode (furikaeri)', () => {
   const battle = (overrides = {}) => ({
     player_code: null,
-    player_codes: { 1: '1111', 2: '2222', 10: '1010' },
     player: {
       mode: 'battle',
       state: 3,
       accepting_answer: true,
       question: { id: 201, text: 'Q' },
-      teams: [{ number: 1, name: 'システム' }, { number: 2, name: '音響' }],
+      teams: [{ number: 1, name: 'システム' }, { number: 10, name: '本部イベント' }],
     },
     ...overrides,
   });
 
-  test('an answer is tagged with the team whose code it carries', () => {
+  test('an answer is queued with the department number, without a code', () => {
     const store = new HostRelayStore(() => 5);
     store.setState(battle());
-    store.pushPlayerAnswer({ code: '2222', value: 30, question_id: 201 });
-    store.pushPlayerAnswer({ code: '1010', value: 70, question_id: 201 });
+    store.pushPlayerAnswer({ team: 10, value: 70, question_id: 201 });
     expect(store.commandsAfter(0).commands).toEqual([
-      { seq: 1, type: 'answer', value: 30, source: 'player', code: '2222', question_id: 201, at: 5, team: 2 },
-      { seq: 2, type: 'answer', value: 70, source: 'player', code: '1010', question_id: 201, at: 5, team: 10 },
+      { seq: 1, type: 'answer', value: 70, source: 'player', team: 10, question_id: 201, at: 5 },
     ]);
   });
 
-  test('a wrong code counts toward the lockout', () => {
+  test('unknown or non-participating departments are rejected without counting toward the lockout', () => {
     const store = new HostRelayStore(() => 0);
     store.setState(battle());
-    expect(() => store.pushPlayerAnswer({ code: '0427', value: 1, question_id: 201 })).toThrow('合言葉が違います');
-    expect(store.codeFailures).toHaveLength(1);
+    expect(() => store.pushPlayerAnswer({ team: 4, value: 1, question_id: 201 })).toThrow('部門を選び直して');
+    expect(() => store.pushPlayerAnswer({ team: '1', value: 1, question_id: 201 })).toThrow('部門を選び直して');
+    expect(() => store.pushPlayerAnswer({ value: 1, question_id: 201 })).toThrow('部門を選び直して');
+    expect(store.codeFailures).toHaveLength(0);
+    expect(store.commandsAfter(0).commands).toHaveLength(0);
   });
 
-  test('check tells the team name without queuing anything', () => {
+  test('closed answers and stale questions are still rejected', () => {
     const store = new HostRelayStore(() => 0);
     store.setState(battle({ player: { ...battle().player, accepting_answer: false } }));
-    expect(store.checkPlayerCode({ code: '2222' })).toEqual({ team: 2, name: '音響' });
-    expect(() => store.checkPlayerCode({ code: '9999' })).toThrow('合言葉が違います');
-    expect(store.commandsAfter(0).commands).toHaveLength(0);
+    expect(() => store.pushPlayerAnswer({ team: 1, value: 1, question_id: 201 })).toThrow('受け付けていません');
+    store.setState(battle());
+    expect(() => store.pushPlayerAnswer({ team: 1, value: 1, question_id: 200 })).toThrow('問題が変わりました');
   });
 
   test('host commands for the battle mode', () => {

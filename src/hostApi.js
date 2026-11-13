@@ -163,11 +163,22 @@ class HostRelayStore {
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       throw new PlayerAnswerError(400, '送信の形式が正しくありません');
     }
-    const { code, value, question_id: questionId } = /** @type {any} */ (body);
+    const { code, value, question_id: questionId, team } = /** @type {any} */ (body);
     if (!(Number.isInteger(value) && value >= 0 && value <= 100)) {
       throw new PlayerAnswerError(400, '回答は0〜100の整数で入力してください');
     }
-    const team = this.matchCode(code);
+    // The department battle mode (furikaeri, 2026-12) has no codes: every department answers
+    // at once and picks itself from a list. Everyone in the room belongs to some department,
+    // so answering as another department is not guarded against.
+    const battle = state.player.mode === 'battle';
+    if (battle) {
+      const teams = Array.isArray(state.player.teams) ? state.player.teams : [];
+      if (!Number.isInteger(team) || !teams.some((t) => t && t.number === team)) {
+        throw new PlayerAnswerError(400, '部門を選び直してください');
+      }
+    } else {
+      this.checkCode(code);
+    }
     if (!state.player.accepting_answer) {
       throw new PlayerAnswerError(409, 'いまは回答を受け付けていません');
     }
@@ -177,16 +188,9 @@ class HostRelayStore {
 
     this.seq += 1;
     /** @type {Record<string, unknown>} */
-    const command = {
-      seq: this.seq,
-      type: 'answer',
-      value,
-      source: 'player',
-      code,
-      question_id: questionId,
-      at: now,
-    };
-    if (team !== null) command.team = team; // battle mode: which department sent it
+    const command = battle
+      ? { seq: this.seq, type: 'answer', value, source: 'player', team, question_id: questionId, at: now }
+      : { seq: this.seq, type: 'answer', value, source: 'player', code, question_id: questionId, at: now };
     this.commands.push(command);
     if (this.commands.length > MAX_COMMANDS) {
       this.commands.shift();
@@ -195,27 +199,15 @@ class HostRelayStore {
   }
 
   /**
-   * Find whose code this is. Wrong codes are counted for the brute-force lockout.
-   * In the department battle mode the PC sends `player_codes` (team number -> code)
-   * and every team answers at once; otherwise only the current team's `player_code` is valid.
+   * Check the current team's code (the 11/1 festival mode). Wrong codes are counted
+   * for the brute-force lockout.
    * @param {unknown} code
-   * @returns {number | null} the team number in the battle mode, null otherwise
    */
-  matchCode(code) {
+  checkCode(code) {
     const now = this.now();
-    if (now < this.codeLockedUntil) {
-      throw new PlayerAnswerError(429, '合言葉の間違いが続いたため、しばらく受け付けを止めています。少し待ってからもう一度送ってください');
-    }
     const state = /** @type {any} */ (this.state);
-    const codes = state && state.player_codes;
-    if (codes && typeof codes === 'object') {
-      for (const [team, expected] of Object.entries(codes)) {
-        if (typeof expected === 'string' && tokenMatches(code, expected)) {
-          return Number(team);
-        }
-      }
-    } else if (state && state.player_code && tokenMatches(code, state.player_code)) {
-      return null;
+    if (state && state.player_code && tokenMatches(code, state.player_code)) {
+      return;
     }
     this.codeFailures = this.codeFailures.filter((t) => now - t < CODE_FAILURE_WINDOW_MS);
     this.codeFailures.push(now);
@@ -224,22 +216,6 @@ class HostRelayStore {
       this.codeFailures = [];
     }
     throw new PlayerAnswerError(403, '合言葉が違います。司会に確認してください');
-  }
-
-  /**
-   * Tell a team's phone which team its code belongs to, before it answers.
-   * @param {unknown} body
-   */
-  checkPlayerCode(body) {
-    const state = /** @type {any} */ (this.state);
-    if (!state || !state.player) {
-      throw new PlayerAnswerError(503, '進行を管理するPCがまだつながっていません');
-    }
-    const code = body && typeof body === 'object' ? /** @type {any} */ (body).code : undefined;
-    const team = this.matchCode(code);
-    const teams = Array.isArray(state.player.teams) ? state.player.teams : [];
-    const found = team === null ? null : teams.find((t) => t && t.number === team);
-    return { team, name: found ? found.name : null };
   }
 
   getPlayerState() {
@@ -419,11 +395,9 @@ function createHostApi({ token, store = new HostRelayStore(), ranking = undefine
     const route = `${req.method} ${pathname}`;
     if (route === 'GET /api/player/state') {
       sendJson(res, 200, store.getPlayerState());
-    } else if (route === 'POST /api/player/answer' || route === 'POST /api/player/check') {
+    } else if (route === 'POST /api/player/answer') {
       readJson(req)
-        .then((body) => sendJson(res, 200, route === 'POST /api/player/check'
-          ? store.checkPlayerCode(body)
-          : { seq: store.pushPlayerAnswer(body) }))
+        .then((body) => sendJson(res, 200, { seq: store.pushPlayerAnswer(body) }))
         .catch((e) => {
           if (e instanceof PlayerAnswerError) {
             sendJson(res, e.status, { error: e.message });
