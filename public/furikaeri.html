@@ -75,15 +75,13 @@
   td { padding: 7px 2px; border-top: 1px solid var(--line); }
   td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   tr.me td { font-weight: 800; color: var(--accent); }
-  .code-form input {
-    width: 100%; min-height: 64px; font-size: 36px; text-align: center; letter-spacing: .3em;
-    border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); margin: 10px 0;
+  .teams-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .teams-pick button {
+    min-height: 56px; border-radius: 12px; border: 1px solid var(--line); background: var(--key);
+    color: var(--text); font-size: 16px; font-weight: 800; padding: 4px 6px; touch-action: manipulation; white-space: nowrap;
   }
-  .code-form button, .link {
-    width: 100%; min-height: 52px; border: 0; border-radius: 12px; background: var(--accent);
-    color: var(--accent-text); font-size: 18px; font-weight: 800;
-  }
-  .link { background: none; color: var(--muted); font-size: 14px; font-weight: 600; min-height: 40px; text-decoration: underline; }
+  .link {
+    width: 100%; border: 0; border-radius: 12px; background: none; color: var(--muted); font-size: 14px; font-weight: 600; min-height: 40px; text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -92,13 +90,11 @@
   <span id="conn" class="pill"><span class="dot"></span><span id="conn-text">接続中…</span></span>
 </header>
 
-<form id="code-form" class="card code-form hidden">
-  <div class="big">部門の合言葉</div>
-  <div class="muted">カードに書いてある6桁の数字を入れてください。</div>
-  <input id="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="000000">
-  <button type="submit">はじめる</button>
-  <div id="code-status" class="status" data-kind="ng"></div>
-</form>
+<div id="pick" class="card hidden">
+  <div class="big">あなたの部門は？</div>
+  <div class="muted" id="pick-note">自分の部門のボタンを押してください。押し間違えたら、あとで選び直せます。</div>
+  <div class="teams-pick" id="pick-buttons"></div>
+</div>
 
 <div id="game" class="hidden">
   <div class="card row">
@@ -140,7 +136,7 @@
     <table><tbody id="rank-rows"></tbody></table>
   </div>
 
-  <button id="change-code" class="link">部門の合言葉を入れ直す</button>
+  <button id="change-team" class="link">部門を選び直す</button>
 </div>
 
 <script>
@@ -149,20 +145,18 @@
 
   var POLL_MS = 1000;
   var STALE_SEC = 8;
-  var CODE_KEY = "suzuleague-furikaeri-code";
+  var TEAM_KEY = "suzuleague-furikaeri-team";
   var STATE = { IDLE: 0, QUESTION: 2, ANSWERING: 3, REVEAL: 4, ROUND_RESULT: 5, FINISHED: 8, OPEN: 9 };
 
   var el = function (id) { return document.getElementById(id); };
-  var code = "";
-  var team = null;          // {team, name}
+  var teamNo = null;        // 選んだ部門の番号（端末に覚えておく）
   var current = null;
   var typed = "";           // テンキーで入れている数字
   var typedFor = null;      // どの問題のために入れているか（問題が変わったら消す）
   var sent = null;          // この問題に送った数字 {qid, value}
   var sending = false;
-  var checking = false;     // 保存してあった合言葉を確かめているところ
 
-  try { code = localStorage.getItem(CODE_KEY) || ""; } catch (e) { /* 保存できない環境 */ }
+  try { teamNo = Number(localStorage.getItem(TEAM_KEY)) || null; } catch (e) { /* 保存できない環境 */ }
 
   function setConn(kind, text) { el("conn").setAttribute("data-kind", kind); el("conn-text").textContent = text; }
   function show(id, visible) { el(id).classList.toggle("hidden", !visible); }
@@ -182,32 +176,35 @@
       });
   }
 
-  // ---- 合言葉 ----------------------------------------------------------
+  // ---- 部門を選ぶ ------------------------------------------------------
 
-  function checkCode(c) {
-    return postJson("api/player/check", { code: c }).then(function (data) {
-      if (!data.team) throw new Error("いまは部門対抗モードではありません");
-      code = c;
-      team = data;
-      try { localStorage.setItem(CODE_KEY, c); } catch (e) { /* 保存できない環境 */ }
-      render(current);
-    });
+  function pickTeam(n) {
+    teamNo = n; sent = null;
+    try { localStorage.setItem(TEAM_KEY, String(n)); } catch (e) { /* 保存できない環境 */ }
+    render(current);
   }
 
-  el("code-form").addEventListener("submit", function (ev) {
-    ev.preventDefault();
-    var c = el("code-input").value.trim();
-    if (!/^\d{6}$/.test(c)) { el("code-status").textContent = "6桁の数字を入れてください"; return; }
-    el("code-status").textContent = "";
-    checkCode(c).catch(function (e) { el("code-status").textContent = e.message; });
+  el("pick-buttons").addEventListener("click", function (ev) {
+    var b = ev.target.closest && ev.target.closest("button[data-team]");
+    if (b) pickTeam(Number(b.getAttribute("data-team")));
   });
 
-  el("change-code").addEventListener("click", function () {
-    code = ""; team = null; sent = null;
-    try { localStorage.removeItem(CODE_KEY); } catch (e) { /* 保存できない環境 */ }
-    el("code-input").value = "";
+  el("change-team").addEventListener("click", function () {
+    teamNo = null; sent = null;
+    try { localStorage.removeItem(TEAM_KEY); } catch (e) { /* 保存できない環境 */ }
     render(current);
   });
+
+  function drawPick(s) {
+    var teams = s && s.mode === "battle" ? s.teams : [];
+    el("pick-note").textContent = teams.length
+      ? "自分の部門のボタンを押してください。押し間違えたら、あとで選び直せます。"
+      : "準備中です。進行のPCがつながると部門のボタンが出ます。";
+    var html = teams.map(function (t) {
+      return '<button type="button" data-team="' + t.number + '">' + esc(t.name) + "</button>";
+    }).join("");
+    if (el("pick-buttons").dataset.html !== html) { el("pick-buttons").innerHTML = html; el("pick-buttons").dataset.html = html; }
+  }
 
   // ---- テンキー --------------------------------------------------------
 
@@ -237,7 +234,7 @@
     var value = Number(typed), qid = s.question.id;
     sending = true; drawReadout();
     el("a-status").textContent = "送っています…"; el("a-status").dataset.kind = "";
-    postJson("api/player/answer", { code: code, value: value, question_id: qid })
+    postJson("api/player/answer", { team: teamNo, value: value, question_id: qid })
       .then(function () {
         // サーバは預かった時点で返事をする。進行のPCが受け付けたかは、次の状態で確かめる
         sent = { qid: qid, value: value, at: Date.now() };
@@ -271,21 +268,12 @@
 
   function render(s) {
     current = s;
-    var needCode = !code || !team;
-    show("code-form", needCode);
-    show("game", !needCode);
-    if (needCode) {
-      // 保存してある合言葉は、PCがつながってから確かめ直す
-      if (code && !team && !checking && s && s.mode === "battle") {
-        checking = true;
-        checkCode(code)
-          .catch(function (e) { code = ""; el("code-status").textContent = e.message; render(current); })
-          .then(function () { checking = false; });
-      }
-      return;
-    }
-    el("team-name").textContent = team.name;
-    var mine = s && s.teams ? s.teams.filter(function (t) { return t.number === team.team; })[0] : null;
+    var needTeam = !teamNo;
+    show("pick", needTeam);
+    show("game", !needTeam);
+    if (needTeam) { drawPick(s); return; }
+    var mine = s && s.teams ? s.teams.filter(function (t) { return t.number === teamNo; })[0] : null;
+    el("team-name").textContent = mine ? mine.name : "部門" + teamNo;
     el("balloons").textContent = mine ? mine.balloons : "-";
 
     show("answer-card", false); show("result-card", false); show("rank-card", false); show("msg", true);
@@ -325,7 +313,7 @@
     } else if (s.state === STATE.REVEAL || s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) {
       show("msg", s.state === STATE.FINISHED);
       if (s.state === STATE.FINISHED) {
-        var won = s.winners.some(function (w) { return w.number === team.team; });
+        var won = s.winners.some(function (w) { return w.number === teamNo; });
         message(won ? "優勝おめでとうございます！" : "最終結果", "あなたの部門は " + mine.rank + " 位でした。");
       }
       if (mine.error !== null && mine.error !== undefined) {
@@ -339,7 +327,7 @@
         show("rank-card", true);
         var teams = s.teams.slice().sort(function (a, b) { return (a.rank - b.rank) || (a.number - b.number); });
         el("rank-rows").innerHTML = teams.map(function (t) {
-          return '<tr class="' + (t.number === team.team ? "me" : "") + '"><td class="num">' + t.rank + "位</td><td>" +
+          return '<tr class="' + (t.number === teamNo ? "me" : "") + '"><td class="num">' + t.rank + "位</td><td>" +
             esc(t.name) + (t.eliminated ? "（脱落）" : "") + '</td><td class="num">' + t.balloons + "</td></tr>";
         }).join("");
       }

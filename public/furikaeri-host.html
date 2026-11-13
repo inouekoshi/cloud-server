@@ -64,7 +64,6 @@
   table { width: 100%; border-collapse: collapse; }
   td { padding: 8px 2px; border-top: 1px solid var(--line); vertical-align: middle; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  td.code { font-family: ui-monospace, Menlo, monospace; color: var(--muted); }
   tr.off td { color: var(--muted); text-decoration: line-through; }
   tr.out td.name { color: var(--muted); }
   .yes { color: var(--ok); font-weight: 800; }
@@ -115,10 +114,6 @@
   </div>
 </div>
 
-<details class="card" id="codes-card">
-  <summary>部門の合言葉（カードを忘れたとき）</summary>
-  <table><tbody id="codes"></tbody></table>
-</details>
 
 <div id="token-overlay" class="overlay hidden">
   <form id="token-form">
@@ -200,7 +195,6 @@
     show("proxy-card", s.state === STATE.ANSWERING);
 
     renderTeams(s);
-    renderCodes(s);
     renderProxyOptions(s);
     if (s.last_command && s.last_command.seq !== lastShownSeq) {
       lastShownSeq = s.last_command.seq;
@@ -235,12 +229,6 @@
       if (t.damage !== null && t.damage !== undefined) extra += "（−" + t.damage + "）";
       return '<tr class="' + cls + '"><td class="num">' + (t.rank || "") + '位</td><td class="name">' + esc(t.name) +
         (t.eliminated ? "（脱落）" : "") + '</td><td class="num muted">' + extra + '</td><td class="num">' + t.balloons + "</td></tr>";
-    }).join("");
-  }
-
-  function renderCodes(s) {
-    el("codes").innerHTML = s.teams.map(function (t) {
-      return '<tr class="' + (t.active ? "" : "off") + '"><td>' + esc(t.name) + '</td><td class="num code">' + esc(t.code || "") + "</td></tr>";
     }).join("");
   }
 
