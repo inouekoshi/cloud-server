@@ -14,7 +14,9 @@ const hostApi = createHostApi({ token: config.hostToken });
 // We serve static files over HTTP
 const serve = serveStatic('public');
 const server = http.createServer(function handler(req, res) {
-  res.setHeader('X-Frame-Options', 'DENY');
+  // Suzuleague: the battle-mode board (board.html) overlays the Scratch stage (/stage/view/) in an iframe
+  // of the same origin, so only the stage pages may be framed, and only by this site.
+  res.setHeader('X-Frame-Options', (req.url || '').startsWith('/stage/') ? 'SAMEORIGIN' : 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Permissions-Policy', 'interest-cohort=()');
