@@ -239,7 +239,9 @@
   }
 
   /* ---- 正解発表の後半：カードの上で風船が割れる（絵と音は Scratch の素材） ---- */
-  .pops { position: absolute; right: .6vw; top: calc(4.6 * var(--h)); width: 8.4vw; height: calc(9.6 * var(--h)); pointer-events: none; }
+  /* 部門名の行（カードの上から約 6.1h まで）より下に置く。長い名前（「ステージイベント」）の末尾にかからないように。
+     下は横棒（約 15.9h から）の手前まで（風船の上端は高さの 52% までなので、いちばん下の風船も 6.4 + 4.2 + 5.2 ≒ 15.8h で止まる） */
+  .pops { position: absolute; right: .6vw; top: calc(6.4 * var(--h)); width: 8.4vw; height: calc(8 * var(--h)); pointer-events: none; }
   .pop { position: absolute; width: calc(3.4 * var(--h)); height: calc(5.2 * var(--h)); animation: pop-in .35s cubic-bezier(.2,1.6,.4,1) backwards; }
   /* 絵は糸の長い1つの風船（44×327）。頭と糸の上だけを見せ、色は回して変える */
   .pop i { display: block; width: 100%; height: 100%; overflow: hidden; }
@@ -298,11 +300,16 @@
     --tape-bg: var(--red); color: #fff; font-size: calc(4.8 * var(--h)); transform: rotate(-2deg);
   }
 
+  /* 音の案内は、カードのない上の帯（上の青い★（44vw）の右、右上の「第N問」の札の左）に貼る。
+     左下に置くと左下のカードの下端に重なり、タイトルのすぐ右に置くとリハーサルの札に重なる */
   .sound {
-    position: fixed; left: 1.2vw; bottom: calc(1 * var(--h)); z-index: 45; border: 0; cursor: pointer;
-    font-family: var(--font-body); font-size: calc(2 * var(--h)); font-weight: 900; color: var(--ink);
-    --tape-bg: var(--yellow); padding: calc(.6 * var(--h)) 1vw;
+    position: fixed; left: calc(44vw + 5 * var(--h)); top: calc(var(--band) + 3.4 * var(--h)); z-index: 45; border: 0; cursor: pointer;
+    font-family: var(--font-body); font-size: calc(1.8 * var(--h)); font-weight: 900; color: var(--ink); white-space: nowrap;
+    --tape-bg: var(--yellow); padding: calc(.5 * var(--h)) 1vw; transform: rotate(1.2deg);
   }
+  /* 正解発表の前半（Scratch の画面を重ねている間）は上の中央に「第1問」「正解発表」の札が来るので、左上へ移す。
+     ステージ枠は札の下（band + 約 12h から）なので、16:9・16:10・4:3 のどれでも枠にも札にも重ならない */
+  .stage-wrap.on ~ .sound { left: 1.2vw; }
 
   .conn {
     position: fixed; right: 1vw; bottom: calc(.8 * var(--h)); z-index: 2; font-size: calc(1.6 * var(--h)); font-weight: 700; color: #777; opacity: .7;
@@ -357,7 +364,7 @@
     <div id="stage-label" class="stage-label tape">正解は…</div>
   </div>
 </div>
-<button id="sound" class="sound tape" type="button">🔈 クリックすると音が出ます</button>
+<button id="sound" class="sound tape" type="button">🔈 クリックで音が出ます</button>
 
 <script>
 (function () {
