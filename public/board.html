@@ -11,130 +11,226 @@
   元ファイルは suzuleague リポジトリの src/suzuleague/board.html。書き出しは uv run python -m suzuleague.publish。
   設計は docs/furikaeri/design.md の「大画面ページ」。
 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@700;900&display=swap">
 <style>
+  /* 見た目は高専祭の公式HP（テーマ「collage」）のデザインシステムに合わせる。
+     白い紙に、赤・青・黄・黒のテープとハードシャドウのカードを貼る。色は HP の global.css と同じ値 */
   :root {
-    --bg: #0a0f1f;
-    --bg2: #121a33;
-    --card: #17203d;
-    --card-line: #2a3762;
-    --text: #f5f7ff;
-    --muted: #9aa6cc;
-    --accent: #ff4fa3;      /* バルーン */
-    --accent2: #ffd23f;     /* 正解・優勝 */
-    --ok: #4ade80;
-    --out: #5b647f;
-    --damage: #ff6b6b;
+    --blue: #1a33d6;
+    --red: #e31b23;
+    --yellow: #f4d21f;
+    --ink: #111111;
+    --paper: #f8f8f8;
+    --grey: #8c8c8c;
+    --font-body: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+    --font-num: "Bebas Neue", "Impact", "Arial Black", sans-serif;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
-    background: radial-gradient(120% 90% at 50% 0%, var(--bg2), var(--bg) 70%);
-    color: var(--text);
-    font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+    position: relative;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
     overflow: hidden;
     display: flex; flex-direction: column;
     height: 100vh; width: 100vw;
-    padding: 2.2vh 2.4vw 2.6vh;
-    gap: 2vh;
+    padding: 2.6vh 2.6vw 3vh;
+    gap: 2.2vh;
   }
+  /* 紙の質感（HP の body::after と同じノイズ） */
+  body::after {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="4" seed="11"/><feColorMatrix type="saturate" values="0"/></filter><rect width="240" height="240" filter="url(%23n)"/></svg>');
+    background-size: 240px 240px; opacity: .1; mix-blend-mode: multiply;
+  }
+  .num { font-family: var(--font-num); letter-spacing: .01em; }
+  [hidden] { display: none !important; }
+
+  /* ---- テープ（文字にはフィルタを掛けず、::before の地にだけ掛ける） ---- */
+  .tape { position: relative; z-index: 0; display: inline-block; font-weight: 900; }
+  .tape::before {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    background: var(--tape-bg, var(--ink)); filter: url(#tape-edge);
+  }
+
+  /* ---- 四隅の貼り紙（飾り。内容の後ろに敷く） ---- */
+  .deco { position: fixed; pointer-events: none; z-index: 0; }
+  .deco.dots {
+    top: -5vh; left: -4vh; width: 26vh; height: 20vh; transform: rotate(-9deg);
+    background: #fff radial-gradient(circle, var(--ink) 30%, transparent 33%) 0 0 / 2.2vh 2.2vh;
+    filter: url(#torn-edge);
+  }
+  .deco.check {
+    top: -3vh; right: -3vh; width: 22vh; height: 15vh; transform: rotate(7deg);
+    background: repeating-conic-gradient(var(--blue) 0 25%, #fff 0 50%) 0 0 / 3vh 3vh;
+    filter: url(#torn-edge);
+  }
+  .deco.stripe {
+    bottom: -4vh; left: -5vh; width: 30vh; height: 11vh; transform: rotate(8deg);
+    background: repeating-linear-gradient(45deg, var(--red) 0 1.1vh, #fff 1.1vh 2.2vh);
+    filter: url(#torn-edge);
+  }
+  .deco.bluedots {
+    bottom: -6vh; right: -4vh; width: 28vh; height: 18vh; transform: rotate(-6deg);
+    background: #fff radial-gradient(circle, var(--blue) 32%, transparent 35%) 0 0 / 1.8vh 1.8vh;
+    filter: url(#torn-edge);
+  }
+  .deco.star { font-family: var(--font-num); line-height: 1; }
+  .deco.s1 { top: 14vh; right: 2vw; font-size: 6vh; color: var(--red); transform: rotate(14deg); }
+  .deco.s2 { bottom: 4vh; left: 47vw; font-size: 4vh; color: var(--yellow); transform: rotate(-12deg); }
+  .deco.s3 { top: 1.6vh; left: 44vw; font-size: 3.4vh; color: var(--blue); transform: rotate(8deg); }
 
   /* ---- 上部（タイトル・問題・正解） ---- */
-  .top { display: flex; flex-direction: column; gap: 1.2vh; min-height: 27vh; }
+  .top, .grid { position: relative; z-index: 1; }
+  .top { display: flex; flex-direction: column; gap: 1.6vh; min-height: 28vh; }
   .bar { display: flex; align-items: center; justify-content: space-between; gap: 2vw; }
-  .brand { font-size: 2.4vh; font-weight: 800; letter-spacing: .12em; color: var(--muted); }
-  .brand b { color: var(--accent); }
+  .brand {
+    font-size: 3vh; letter-spacing: .08em; color: #fff;
+    padding: .7vh 1.8vw; transform: rotate(-1.6deg); margin-left: 1vw;
+  }
+  .brand b { color: var(--yellow); }
   .round {
-    font-size: 2.6vh; font-weight: 800; padding: .5vh 1.4vw; border-radius: 99px;
-    background: rgba(255,255,255,.08);
+    --tape-bg: var(--red); color: #fff; font-size: 3.2vh; padding: .6vh 1.8vw; transform: rotate(1.4deg);
   }
   .tag {
-    font-size: 2vh; font-weight: 800; padding: .4vh 1vw; border-radius: 6px;
-    background: var(--accent2); color: #1b1300; margin-left: 1vw;
+    --tape-bg: var(--yellow); color: var(--ink); font-size: 2.2vh; letter-spacing: 0;
+    padding: .3vh 1vw; margin-left: 1.2vw; transform: rotate(3deg); vertical-align: middle;
   }
   .main-line {
-    flex: 1; display: flex; align-items: center; justify-content: center; gap: 3vw;
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 3.4vw;
     text-align: center;
   }
+  /* 問題文は、黄色いテープで留めた白いカードに載せる */
   .question {
-    font-size: 5.2vh; font-weight: 800; line-height: 1.35; max-width: 88vw;
-    text-wrap: balance;
+    position: relative; max-width: 86vw;
+    font-size: 5.2vh; font-weight: 900; line-height: 1.4; text-wrap: balance;
+    background: #fff; border: .3vh solid var(--ink); box-shadow: .9vh .9vh 0 var(--ink);
+    padding: 2.4vh 2.8vw 2.2vh; transform: rotate(-.6deg);
   }
-  .question.small { font-size: 3.6vh; color: var(--muted); }
+  .question::before {
+    content: ""; position: absolute; top: -1.6vh; left: 3vw; width: 14vh; height: 3.2vh;
+    background: var(--yellow); transform: rotate(-4deg); filter: url(#tape-edge);
+  }
+  .question.small { font-size: 3.4vh; max-width: 52vw; text-align: left; }
   .correct {
-    display: flex; align-items: baseline; gap: 1.2vw; white-space: nowrap;
+    display: flex; align-items: center; gap: 1.6vw; white-space: nowrap;
     animation: pop .5s cubic-bezier(.2,1.6,.4,1);
   }
-  .correct span { font-size: 4vh; font-weight: 800; color: var(--muted); }
-  .correct b { font-size: 15vh; line-height: 1; font-weight: 900; color: var(--accent2); font-variant-numeric: tabular-nums; }
-  .correct b small { font-size: 7vh; }
-  .headline { font-size: 7vh; font-weight: 900; letter-spacing: .04em; }
-  .headline.win { color: var(--accent2); font-size: 8.5vh; animation: pop .6s cubic-bezier(.2,1.6,.4,1); }
-  .rules { font-size: 3.2vh; line-height: 1.7; color: var(--muted); text-align: left; }
-  .qr { display: flex; align-items: center; gap: 1.4vw; text-align: left; }
-  .qr svg { width: 23vh; height: 23vh; background: #fff; border-radius: 1vh; padding: .6vh; }
-  .qr div { font-size: 2.6vh; line-height: 1.6; color: var(--muted); }
-  .qr b { display: block; font-size: 3vh; color: var(--text); }
-  .rules b { color: var(--text); }
-  .status-line { text-align: center; font-size: 3vh; font-weight: 700; color: var(--muted); }
-  .status-line b { color: var(--text); }
-
-  /* ---- 部門のカード ---- */
-  .grid { flex: 1; display: flex; flex-direction: column; gap: 2vh; justify-content: center; }
-  .row { display: flex; gap: 1.4vw; justify-content: center; flex: 1; max-height: 31vh; }
-  .card {
-    position: relative; width: 17.6vw; border-radius: 1.6vh;
-    background: var(--card); border: .3vh solid var(--card-line);
-    padding: 1.6vh .9vw 1.4vh; display: flex; flex-direction: column; gap: .8vh;
-    transition: transform .6s, opacity .4s, border-color .3s, background .3s;
-    overflow: hidden;
+  .correct span { color: #fff; font-size: 4.2vh; padding: .6vh 1.4vw; transform: rotate(-3deg); }
+  .correct b {
+    --tape-bg: var(--yellow); font-family: var(--font-num); font-weight: 400;
+    font-size: 19vh; line-height: .95; padding: 1.6vh 2.4vw 0; transform: rotate(2deg);
   }
-  .card.answered { border-color: var(--ok); }
-  .card.out { background: #141a2c; border-color: #232a40; }
-  .card.out .name, .card.out .count { color: var(--out); }
-  .card.top1 { border-color: var(--accent2); box-shadow: 0 0 3vh rgba(255,210,63,.35); }
-  .head { display: flex; align-items: baseline; gap: .6vw; }
+  .correct b small { font-size: 9vh; }
+  .headline { color: #fff; font-size: 6.6vh; letter-spacing: .04em; padding: 1.2vh 2.6vw; transform: rotate(-1.2deg); }
+  .headline.win {
+    --tape-bg: var(--red); font-size: 8.6vh; padding: 1.4vh 3vw;
+    animation: pop .6s cubic-bezier(.2,1.6,.4,1);
+  }
+  .win-wrap { display: flex; align-items: center; gap: 2vw; }
+  .win-wrap .star { font-family: var(--font-num); line-height: 1; font-size: 11vh; }
+  .win-wrap .star.l { color: var(--yellow); transform: rotate(-14deg); }
+  .win-wrap .star.r { color: var(--blue); transform: rotate(12deg); }
+
+  /* 待機中：ルールのカードと QR */
+  .rules {
+    position: relative; text-align: left; font-size: 3.2vh; font-weight: 700; line-height: 1.85;
+    background: #fff; border: .3vh solid var(--ink); box-shadow: .9vh .9vh 0 var(--ink);
+    padding: 2.6vh 2.6vw 2.2vh; transform: rotate(-.8deg);
+  }
+  .rules::before {
+    content: ""; position: absolute; top: -1.5vh; right: 3vw; width: 13vh; height: 3vh;
+    background: var(--blue); transform: rotate(5deg); filter: url(#tape-edge);
+  }
+  .rules b { font-weight: 900; background: linear-gradient(transparent 58%, var(--yellow) 58%); }
+  .qr { display: flex; align-items: center; gap: 2vw; text-align: left; transform: rotate(1deg); }
+  .qr .code { --tape-bg: var(--yellow); padding: 1.8vh; }
+  .qr svg { display: block; width: 23vh; height: 23vh; background: #fff; padding: .6vh; }
+  .qr div { font-size: 2.7vh; font-weight: 700; line-height: 1.7; }
+  .qr div b { --tape-bg: var(--blue); color: #fff; font-size: 3vh; padding: .4vh 1.2vw; margin-bottom: 1.2vh; transform: rotate(-2deg); }
+  .status-line { text-align: center; font-size: 3.2vh; font-weight: 700; }
+  .status-line b { font-weight: 900; color: var(--red); }
+
+  /* ---- 部門のカード（白地・黒枠・ハードシャドウ。少しずつ傾けて貼る） ---- */
+  .grid { flex: 1; display: flex; flex-direction: column; gap: 3vh; justify-content: center; }
+  .row { display: flex; gap: 1.6vw; justify-content: center; flex: 1; max-height: 31vh; }
+  .card {
+    position: relative; width: 17.4vw;
+    background: #fff; border: .3vh solid var(--ink); box-shadow: .7vh .7vh 0 var(--ink);
+    padding: 2.2vh 1vw 1.4vh; display: flex; flex-direction: column; gap: .8vh;
+    transform: rotate(var(--tilt, 0deg));
+    transition: transform .6s, opacity .4s, background .3s, box-shadow .3s;
+  }
+  .row .card:nth-child(4n+1) { --tilt: -.9deg; --tape-bg: var(--yellow); }
+  .row .card:nth-child(4n+2) { --tilt: .7deg;  --tape-bg: var(--red); }
+  .row .card:nth-child(4n+3) { --tilt: -.4deg; --tape-bg: var(--blue); }
+  .row .card:nth-child(4n+4) { --tilt: 1deg;   --tape-bg: var(--yellow); }
+  .row:nth-child(2) .card:nth-child(odd) { --tilt: .8deg; }
+  .card::before {
+    content: ""; position: absolute; top: -1.4vh; left: 50%; width: 10vh; height: 2.6vh; margin-left: -5vh;
+    background: var(--tape-bg); transform: rotate(-3deg); filter: url(#tape-edge);
+  }
+  .card.answered { box-shadow: .7vh .7vh 0 var(--blue); border-color: var(--blue); }
+  .card.out {
+    background: repeating-linear-gradient(135deg, #f1f1f1 0 1vh, #e6e6e6 1vh 2vh);
+    border-color: var(--grey); box-shadow: .7vh .7vh 0 var(--grey);
+  }
+  .card.out::before { background: #bdbdbd; }
+  .card.out .name, .card.out .count, .card.out .count small { color: var(--grey); }
+  .card.top1 { background: var(--yellow); }
+  .card.top1::after {
+    content: "★"; position: absolute; top: -3.4vh; right: -1.4vw; font-family: var(--font-num);
+    font-size: 7vh; line-height: 1; color: var(--red); transform: rotate(16deg);
+  }
+  .head { display: flex; align-items: center; gap: .6vw; }
   .name {
-    flex: 1; min-width: 0; font-size: 2.7vh; font-weight: 800; line-height: 1.2; white-space: nowrap;
+    flex: 1; min-width: 0; font-size: 2.8vh; font-weight: 900; line-height: 1.25; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
   }
-  .rank { flex: none; font-size: 2.3vh; font-weight: 900; color: var(--muted); }
-  .card.top1 .rank { color: var(--accent2); }
+  .rank { flex: none; font-size: 2.6vh; font-weight: 900; }
+  .card.top1 .rank { color: var(--red); }
   .count {
-    font-size: 7.4vh; font-weight: 900; line-height: 1; color: var(--accent);
-    font-variant-numeric: tabular-nums;
+    font-family: var(--font-num); font-size: 9.6vh; line-height: .9; color: var(--red);
   }
-  .count small { font-size: 2.4vh; color: var(--muted); font-weight: 700; margin-left: .3vw; }
-  .meter { height: 1.4vh; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
-  .meter i {
-    display: block; height: 100%; border-radius: 99px; background: var(--accent);
-    transition: width .25s linear;
-  }
-  .card.out .meter i { background: var(--out); }
+  .count small { font-family: var(--font-body); font-size: 2.3vh; font-weight: 900; color: var(--ink); margin-left: .3vw; }
+  .meter { height: 1.7vh; border: .25vh solid var(--ink); background: #fff; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--red); transition: width .25s linear; }
+  .card.out .meter { border-color: var(--grey); }
+  .card.out .meter i { background: var(--grey); }
   .slot {
-    margin-top: auto; min-height: 6.4vh; border-radius: 1vh; background: rgba(255,255,255,.05);
+    margin-top: auto; min-height: 6.8vh; border: .25vh dashed var(--ink); background: rgba(255,255,255,.7);
     display: flex; align-items: center; justify-content: center; gap: .8vw;
-    font-size: 2.6vh; font-weight: 700; color: var(--muted);
+    font-size: 2.6vh; font-weight: 700; color: #555;
   }
-  .slot.done { color: var(--ok); }
-  .slot .guess { font-size: 5vh; font-weight: 900; color: var(--text); font-variant-numeric: tabular-nums; }
-  .slot .guess small { font-size: 2.6vh; }
-  .slot .dmg { font-size: 3.4vh; font-weight: 900; color: var(--damage); font-variant-numeric: tabular-nums; }
-  .slot .dmg.zero { color: var(--accent2); font-size: 2.8vh; white-space: nowrap; }
-  .slot .note { font-size: 2.4vh; white-space: nowrap; }
-  .slot .note b { color: var(--damage); font-size: 3vh; }
+  .card.out .slot { border-color: var(--grey); }
+  .slot.done { background: var(--blue); border: .25vh solid var(--blue); color: #fff; font-weight: 900; }
+  .slot .guess { font-family: var(--font-num); font-size: 6.4vh; line-height: 1; color: var(--ink); padding-top: .6vh; }
+  .slot .guess small { font-size: 3.2vh; }
+  .slot .dmg {
+    --tape-bg: var(--red); font-family: var(--font-num); font-weight: 400; font-size: 4.4vh; line-height: 1;
+    color: #fff; padding: .7vh .7vw .2vh; transform: rotate(-4deg);
+  }
+  .slot .dmg.zero {
+    --tape-bg: var(--yellow); font-family: var(--font-body); font-weight: 900; color: var(--ink);
+    font-size: 2.6vh; padding: .6vh .7vw; white-space: nowrap;
+  }
+  .slot .note { font-size: 2.4vh; font-weight: 900; color: var(--ink); white-space: nowrap; }
+  .slot .note b { font-family: var(--font-num); font-weight: 400; color: var(--red); font-size: 3.8vh; vertical-align: -.3vh; }
   .slot.flip { animation: flip .5s ease-out backwards; }
   .badge {
-    position: absolute; inset: auto 0 0 0; text-align: center; padding: .4vh 0;
-    font-size: 2vh; font-weight: 800; background: #2b2f3f; color: #c7cbe0; letter-spacing: .2em;
+    --tape-bg: var(--ink); flex: none; color: #fff; font-size: 1.9vh; padding: .2vh .6vw; transform: rotate(-4deg);
   }
 
   .conn {
-    position: fixed; right: 1vw; bottom: .8vh; font-size: 1.6vh; color: var(--muted); opacity: .6;
+    position: fixed; right: 1vw; bottom: .8vh; z-index: 2; font-size: 1.6vh; font-weight: 700; color: #777; opacity: .7;
   }
-  .conn[data-kind="ng"] { color: var(--damage); opacity: 1; }
-  .empty { margin: auto; font-size: 4vh; color: var(--muted); }
+  .conn[data-kind="ng"] { color: var(--red); opacity: 1; }
+  .empty { margin: auto; font-size: 4vh; font-weight: 900; }
 
-  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } to { opacity: 1; } }
   @keyframes flip { from { transform: rotateX(90deg); opacity: 0; } to { transform: none; opacity: 1; } }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -142,10 +238,30 @@
 </style>
 </head>
 <body>
+<!-- テープのちぎれと紙の破れ（HP の SvgDefs.astro と同じフィルタ） -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="tape-edge" x="-10%" y="-30%" width="120%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.045 0.28" numOctaves="3" seed="7" result="n" />
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="7" />
+    </filter>
+    <filter id="torn-edge" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="4" seed="3" result="n" />
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="14" />
+    </filter>
+  </defs>
+</svg>
+<div class="deco dots" aria-hidden="true"></div>
+<div class="deco check" aria-hidden="true"></div>
+<div class="deco stripe" aria-hidden="true"></div>
+<div class="deco bluedots" aria-hidden="true"></div>
+<div class="deco star s1" aria-hidden="true">★</div>
+<div class="deco star s2" aria-hidden="true">★</div>
+<div class="deco star s3" aria-hidden="true">★</div>
 <section class="top">
   <div class="bar">
-    <div class="brand"><b>スズリーグ</b> 部門対抗<span id="tag" class="tag" hidden>リハーサル</span></div>
-    <div id="round" class="round" hidden></div>
+    <div class="brand tape"><b>スズリーグ</b> 部門対抗<span id="tag" class="tag tape" hidden>リハーサル</span></div>
+    <div id="round" class="round tape" hidden></div>
   </div>
   <div id="main" class="main-line"></div>
   <div id="status" class="status-line"></div>
@@ -205,8 +321,8 @@
         "全部門が同じ問題に同時に答えます（全" + s.rounds + "問）<br>" +
         "外れた差の分だけ <b>バルーンが割れる</b>。持ち点は <b>100</b><br>" +
         "最後に <b>残りバルーンが一番多い部門</b> が優勝！</div>" +
-        '<div class="qr"><svg viewBox="' + QR_VIEWBOX + '" aria-label="回答ページのQRコード"><path fill="#000" d="' + QR_PATH + '"/></svg>' +
-        "<div><b>入力係のスマホで読み取る</b>回答ページで、自分の部門の<br>ボタンを押してください</div></div>";
+        '<div class="qr"><span class="code tape"><svg viewBox="' + QR_VIEWBOX + '" aria-label="回答ページのQRコード"><path fill="#000" d="' + QR_PATH + '"/></svg></span>' +
+        "<div><b class=\"tape\">入力係のスマホで読み取る</b><br>回答ページで、自分の部門の<br>ボタンを押してください</div></div>";
       status = "参加 " + s.teams.length + " 部門";
     } else if (s.state === STATE.QUESTION) {
       main = '<div class="question">' + q + "</div>";
@@ -219,14 +335,16 @@
       main = '<div class="question">' + q + "</div>";
       status = "<b>予想オープン！</b>　正解は…？";
     } else if (s.state === STATE.REVEAL) {
-      main = '<div class="question small">' + q + '</div><div class="correct"><span>正解</span><b>' +
+      main = '<div class="question small">' + q + '</div><div class="correct"><span class="tape">正解</span><b class="tape">' +
         s.correct + "<small>%</small></b></div>";
     } else if (s.state === STATE.ROUND_RESULT) {
-      main = '<div class="headline">第' + s.round + "問 終了　途中順位</div>";
+      main = '<div class="headline tape">第' + s.round + "問 終了　途中順位</div>";
       status = s.round < s.rounds ? "あと " + (s.rounds - s.round) + " 問" : "次は最終結果！";
     } else if (s.state === STATE.FINISHED) {
       var names = s.winners.map(function (w) { return esc(w.name); }).join("・");
-      main = names ? '<div class="headline win">優勝　' + names + "！</div>" : '<div class="headline">最終結果</div>';
+      main = names
+        ? '<div class="win-wrap"><span class="star l">★</span><div class="headline tape win">優勝　' + names + '！</div><span class="star r">★</span></div>'
+        : '<div class="headline tape">最終結果</div>';
       status = "おつかれさまでした";
     }
     el("main").innerHTML = main;
@@ -259,9 +377,9 @@
       : '<span class="guess">' + t.answer + "<small>%</small></span>";
     var dmg = "";
     if (s.state === STATE.REVEAL && t.damage !== null && t.damage !== undefined) {
-      if (t.damage > 0) dmg = '<span class="dmg">−' + t.damage + "</span>";
-      else if (t.error === 0) dmg = '<span class="dmg zero">ぴったり!</span>';
-      else dmg = '<span class="dmg zero">±0</span>';  // 脱落済みで減らない
+      if (t.damage > 0) dmg = '<span class="dmg tape">−' + t.damage + "</span>";
+      else if (t.error === 0) dmg = '<span class="dmg tape zero">ぴったり!</span>';
+      else dmg = '<span class="dmg tape zero">±0</span>';  // 脱落済みで減らない
     }
     return '<div class="slot flip">' + guess + dmg + "</div>";
   }
@@ -276,11 +394,12 @@
     var start = displayedBalloons(s, t);
     return '<div class="' + cls.join(" ") + '" data-team="' + t.number + '">' +
       '<div class="head"><div class="name">' + esc(t.name) + "</div>" +
+      // 脱落は部門名の横に小さく出す（下の欄に重ねると文字が隠れる。正解発表では数え下げが0に届いてから灰色にする）
+      (t.eliminated && s.state !== STATE.REVEAL ? '<div class="badge tape">脱落</div>' : "") +
       (ranked ? '<div class="rank">' + t.rank + "位</div>" : "") + "</div>" +
       '<div class="count"><span class="n">' + start + "</span><small>個</small></div>" +
       '<div class="meter"><i style="width:' + start + '%"></i></div>' +
       slot(s, t) +
-      (t.eliminated && s.state !== STATE.REVEAL ? '<div class="badge">脱落</div>' : "") +
       "</div>";
   }
 

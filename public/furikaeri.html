@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#111827">
+<meta name="theme-color" content="#f8f8f8">
 <title>スズリーグ 部門の回答ページ</title>
 <!--
   部門対抗モード（振り返り会 2026-12-03）の回答ページ。各部門の入力係が自分のスマホで開き、
@@ -12,81 +12,149 @@
   Render（cloud-server の public/furikaeri.html）から配信する。元ファイルは src/suzuleague/furikaeri.html。
   書き出しは uv run python -m suzuleague.publish。設計は docs/furikaeri/design.md の「回答ページ」。
 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Noto+Sans+JP:wght@700;900&display=swap">
 <style>
+  /* 見た目は高専祭の公式HP（テーマ「collage」）のデザインシステムに合わせる。
+     白い紙に、テープで留めたハードシャドウのカードを貼る。色は HP の global.css と同じ値。
+     HP にならい、暗い配色（ダークモード）は用意しない */
   :root {
-    --bg: #f3f4f6; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
-    --accent: #db2777; --accent-text: #ffffff; --key: #ffffff; --ok: #15803d; --ng: #b91c1c;
-    --gold: #b45309;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0b1020; --card: #161c2e; --text: #f3f4f6; --muted: #9ca3af; --line: #263049;
-      --accent: #ec4899; --key: #1f2740; --ok: #4ade80; --ng: #f87171; --gold: #fbbf24;
-    }
+    --blue: #1a33d6; --red: #e31b23; --yellow: #f4d21f; --ink: #111111; --paper: #f8f8f8;
+    --muted: #555555; --line: #111111;
+    --font-body: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, -apple-system, sans-serif;
+    --font-num: "Bebas Neue", "Impact", "Arial Black", sans-serif;
+    color-scheme: light;
   }
   * { box-sizing: border-box; }
+  html { background: var(--paper); }
   html, body { margin: 0; }
   body {
-    background: var(--bg); color: var(--text);
-    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-    font-size: 16px; line-height: 1.5; -webkit-text-size-adjust: 100%;
-    padding: 0 16px calc(24px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto;
+    position: relative;
+    background: var(--paper); color: var(--ink);
+    font-family: var(--font-body); font-weight: 700;
+    font-size: 16px; line-height: 1.55; -webkit-text-size-adjust: 100%;
+    padding: 0 16px calc(28px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; min-height: 100vh;
   }
-  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 0 4px; }
-  header h1 { font-size: 15px; margin: 0; color: var(--muted); font-weight: 600; }
+  /* 紙の質感（HP の body::after と同じノイズ） */
+  body::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 50;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.9" numOctaves="4" seed="11"/><feColorMatrix type="saturate" values="0"/></filter><rect width="240" height="240" filter="url(%23n)"/></svg>');
+    background-size: 240px 240px; opacity: .1; mix-blend-mode: multiply;
+  }
+  /* 右上の貼り紙（飾り）。はみ出しで横スクロールが出ないよう、入れ物で切り取る */
+  .deco-clip { position: absolute; top: 0; left: 0; right: 0; height: 160px; overflow: hidden; z-index: 0; pointer-events: none; }
+  .deco {
+    position: absolute; top: -18px; right: -26px; width: 120px; height: 70px; z-index: 0; pointer-events: none;
+    background: repeating-conic-gradient(var(--blue) 0 25%, #fff 0 50%) 0 0 / 16px 16px;
+    transform: rotate(8deg); filter: url(#torn-edge);
+  }
+  .deco-star { position: absolute; top: 46px; right: 10px; z-index: 0; font-family: var(--font-num); font-size: 26px; line-height: 1; color: var(--red); transform: rotate(14deg); pointer-events: none; }
+  header, #pick, #game { position: relative; z-index: 1; }
+
+  /* テープ（文字にはフィルタを掛けず、::before の地にだけ掛ける） */
+  .tape { position: relative; z-index: 0; display: inline-block; font-weight: 900; }
+  .tape::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--tape-bg, var(--ink)); filter: url(#tape-edge); }
+
+  header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 18px 0 6px; }
+  header h1 { font-size: 15px; margin: 0; color: #fff; padding: 5px 16px; letter-spacing: .06em; transform: rotate(-1.6deg); }
+  header h1 b { color: var(--yellow); }
   .pill {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; flex: none;
-    padding: 4px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line);
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; flex: none;
+    padding: 3px 10px; background: #fff; border: 2px solid var(--ink); transform: rotate(1deg);
   }
-  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .pill[data-kind="ok"] .dot { background: var(--ok); }
-  .pill[data-kind="ng"] .dot { background: var(--ng); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 10px 0; }
-  .label { font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: #999; }
+  .pill[data-kind="ok"] .dot { background: var(--blue); }
+  .pill[data-kind="ng"] .dot { background: var(--red); }
+
+  /* カード：白地・黒枠・ハードシャドウ。上にテープを1枚貼る */
+  .card {
+    position: relative; background: #fff; border: 2px solid var(--ink); box-shadow: 5px 5px 0 var(--ink);
+    padding: 18px 16px 14px; margin: 22px 0 14px; transform: rotate(var(--tilt, -.5deg));
+  }
+  .card::before {
+    content: ""; position: absolute; top: -11px; left: 18px; width: 72px; height: 20px;
+    background: var(--tape, var(--yellow)); transform: rotate(-4deg); filter: url(#tape-edge);
+  }
+  .card.t-red { --tape: var(--red); --tilt: .5deg; }
+  .card.t-blue { --tape: var(--blue); --tilt: -.3deg; }
+  .card.flat { --tilt: 0deg; }
+  .label { font-size: 12px; color: var(--muted); letter-spacing: .06em; }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  .team-name { font-size: 20px; font-weight: 800; overflow-wrap: anywhere; }
+  .team-name { font-size: 22px; font-weight: 900; line-height: 1.3; overflow-wrap: anywhere; }
   .balloons { text-align: right; white-space: nowrap; }
-  .balloons b { font-size: 30px; color: var(--accent); font-variant-numeric: tabular-nums; }
-  .question { font-size: 19px; font-weight: 700; margin: 6px 0 0; overflow-wrap: anywhere; }
-  .big { font-size: 22px; font-weight: 800; margin: 4px 0; }
+  .balloons b { font-family: var(--font-num); font-weight: 400; font-size: 46px; line-height: 1; color: var(--red); }
+  .question { font-size: 19px; font-weight: 900; margin: 8px 0 0; overflow-wrap: anywhere; }
+  .big { font-size: 24px; font-weight: 900; margin: 2px 0 4px; }
   .muted { color: var(--muted); }
   .hidden { display: none !important; }
-  .readout { text-align: center; font-size: 64px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; margin: 4px 0; }
-  .readout small { font-size: 28px; margin-left: 4px; color: var(--muted); }
-  .readout.empty { color: var(--muted); }
-  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .readout { text-align: center; font-family: var(--font-num); font-size: 92px; line-height: 1; margin: 10px 0 2px; }
+  .readout small { font-size: 42px; margin-left: 4px; }
+  .readout.empty { color: #b5b5b5; }
+  .keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 10px; }
   .keys button {
-    min-height: 58px; font-size: 26px; font-weight: 700; border-radius: 12px;
-    border: 1px solid var(--line); background: var(--key); color: var(--text); touch-action: manipulation;
+    min-height: 60px; font-family: var(--font-num); font-size: 34px; line-height: 1; padding-top: 4px;
+    border: 2px solid var(--ink); border-radius: 0; background: #fff; color: var(--ink);
+    box-shadow: 3px 3px 0 var(--ink); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
-  .keys button.sub { font-size: 17px; color: var(--muted); }
+  .keys button:active { transform: translate(3px, 3px); box-shadow: none; }
+  .keys button.sub { font-family: var(--font-body); font-weight: 900; font-size: 15px; padding-top: 0; background: var(--paper); }
   .send {
-    width: 100%; min-height: 64px; margin-top: 12px; border: 0; border-radius: 14px;
-    background: var(--accent); color: var(--accent-text); font-size: 20px; font-weight: 800; touch-action: manipulation;
+    width: 100%; min-height: 64px; margin-top: 16px; border: 2px solid var(--ink); border-radius: 0;
+    background: var(--red); color: #fff; font-family: var(--font-body); font-size: 20px; font-weight: 900;
+    box-shadow: 4px 4px 0 var(--ink); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
-  .send:disabled { opacity: .4; }
-  .status { text-align: center; margin-top: 10px; min-height: 24px; font-weight: 700; }
-  .status[data-kind="ok"] { color: var(--ok); }
-  .status[data-kind="ng"] { color: var(--ng); }
-  .result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-top: 8px; }
-  .result div { background: var(--bg); border-radius: 10px; padding: 8px 4px; }
-  .result b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; }
+  .send:active:not(:disabled) { transform: translate(4px, 4px); box-shadow: none; }
+  .send:disabled { background: #c9c9c9; color: #fff; border-color: #9a9a9a; box-shadow: 4px 4px 0 #9a9a9a; }
+  .status { text-align: center; margin-top: 12px; min-height: 24px; font-weight: 900; }
+  .status[data-kind="ok"] { color: var(--blue); }
+  .status[data-kind="ng"] { color: var(--red); }
+  .result { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; margin-top: 10px; }
+  .result div { border: 2px solid var(--ink); background: var(--paper); padding: 8px 4px 4px; }
+  .result b { display: block; font-family: var(--font-num); font-weight: 400; font-size: 36px; line-height: 1.1; }
+  .result div:nth-child(2) { background: var(--yellow); }
+  .result div:nth-child(2) .label { color: var(--ink); }
+  .result div:nth-child(3) b { color: var(--red); }
   table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  td { padding: 7px 2px; border-top: 1px solid var(--line); }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  tr.me td { font-weight: 800; color: var(--accent); }
-  .teams-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  td { padding: 8px 4px; border-top: 1.5px dashed var(--ink); }
+  tr:first-child td { border-top: 0; }
+  td.num { text-align: right; white-space: nowrap; font-family: var(--font-num); font-size: 22px; line-height: 1; font-weight: 400; }
+  td.num:first-child { text-align: left; font-family: var(--font-body); font-size: 15px; font-weight: 900; }
+  tr.me td { background: var(--yellow); font-weight: 900; }
+  .teams-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
   .teams-pick button {
-    min-height: 56px; border-radius: 12px; border: 1px solid var(--line); background: var(--key);
-    color: var(--text); font-size: 16px; font-weight: 800; padding: 4px 6px; touch-action: manipulation; white-space: nowrap;
+    min-height: 58px; border: 2px solid var(--ink); border-left: 10px solid var(--c, var(--red)); border-radius: 0;
+    background: #fff; color: var(--ink); font-family: var(--font-body); font-size: 16px; font-weight: 900;
+    padding: 4px 6px; box-shadow: 3px 3px 0 var(--ink); touch-action: manipulation; white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
   }
+  .teams-pick button:nth-child(4n+2) { --c: var(--blue); }
+  .teams-pick button:nth-child(4n+3) { --c: var(--yellow); }
+  .teams-pick button:nth-child(4n+4) { --c: var(--ink); }
+  .teams-pick button:active { transform: translate(3px, 3px); box-shadow: none; }
   .link {
-    width: 100%; border: 0; border-radius: 12px; background: none; color: var(--muted); font-size: 14px; font-weight: 600; min-height: 40px; text-decoration: underline; }
+    width: 100%; border: 0; background: none; color: var(--ink); font-family: var(--font-body); font-size: 14px; font-weight: 700;
+    min-height: 44px; margin-top: 6px; text-decoration: underline; text-underline-offset: 3px;
+  }
 </style>
 </head>
 <body>
+<!-- テープのちぎれと紙の破れ（HP の SvgDefs.astro と同じフィルタ） -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="tape-edge" x="-10%" y="-30%" width="120%" height="160%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.045 0.28" numOctaves="3" seed="7" result="n" />
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="7" />
+    </filter>
+    <filter id="torn-edge" x="-15%" y="-15%" width="130%" height="130%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="4" seed="3" result="n" />
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="14" />
+    </filter>
+  </defs>
+</svg>
+<div class="deco-clip" aria-hidden="true"><div class="deco"></div><div class="deco-star">★</div></div>
 <header>
-  <h1>スズリーグ 部門対抗</h1>
+  <h1 class="tape"><b>スズリーグ</b> 部門対抗</h1>
   <span id="conn" class="pill"><span class="dot"></span><span id="conn-text">接続中…</span></span>
 </header>
 
@@ -97,18 +165,18 @@
 </div>
 
 <div id="game" class="hidden">
-  <div class="card row">
+  <div class="card row t-red">
     <div><div class="label">あなたの部門</div><div id="team-name" class="team-name"></div></div>
     <div class="balloons"><div class="label">残りバルーン</div><b id="balloons">100</b></div>
   </div>
 
-  <div id="msg" class="card">
+  <div id="msg" class="card t-blue">
     <div id="m-title" class="big"></div>
     <div id="m-body" class="muted"></div>
     <div id="m-question" class="question hidden"></div>
   </div>
 
-  <div id="answer-card" class="card hidden">
+  <div id="answer-card" class="card flat hidden">
     <div class="label" id="a-round"></div>
     <div id="a-question" class="question"></div>
     <div id="readout" class="readout empty">--<small>%</small></div>
@@ -122,7 +190,7 @@
     <div id="a-status" class="status"></div>
   </div>
 
-  <div id="result-card" class="card hidden">
+  <div id="result-card" class="card t-red hidden">
     <div class="label" id="r-title"></div>
     <div class="result">
       <div><span class="label">予想</span><b id="r-answer">-</b></div>
@@ -131,7 +199,7 @@
     </div>
   </div>
 
-  <div id="rank-card" class="card hidden">
+  <div id="rank-card" class="card t-blue hidden">
     <div class="label">順位</div>
     <table><tbody id="rank-rows"></tbody></table>
   </div>
