@@ -226,6 +226,72 @@
     --tape-bg: var(--ink); flex: none; color: #fff; font-size: 1.9vh; padding: .2vh .6vw; transform: rotate(-4deg);
   }
 
+  /* ---- 正解発表の後半：カードの上で風船が割れる（絵と音は Scratch の素材） ---- */
+  .pops { position: absolute; right: .6vw; top: 4.6vh; width: 8.4vw; height: 9.6vh; pointer-events: none; }
+  .pop { position: absolute; width: 3.4vh; height: 5.2vh; animation: pop-in .35s cubic-bezier(.2,1.6,.4,1) backwards; }
+  /* 絵は糸の長い1つの風船（44×327）。頭と糸の上だけを見せ、色は回して変える */
+  .pop i { display: block; width: 100%; height: 100%; overflow: hidden; }
+  .pop img { display: block; width: 3.4vh; height: auto; }
+  .pop.gone i { animation: burst .28s ease-out forwards; }
+  .pop.gone::after {
+    content: "✸"; position: absolute; left: 50%; top: .6vh; margin-left: -2.4vh; width: 4.8vh; text-align: center;
+    font-size: 4.8vh; line-height: 1; color: var(--yellow); -webkit-text-stroke: .25vh var(--red);
+    animation: spark .28s ease-out forwards;
+  }
+  .dove {
+    position: fixed; z-index: 30; top: 52vh; left: 100vw; width: 16vh; pointer-events: none;
+    animation: fly 2.6s linear forwards;
+  }
+  @keyframes pop-in { from { transform: scale(0); } }
+  @keyframes burst { to { transform: scale(1.6); opacity: 0; } }
+  @keyframes spark { from { transform: scale(.4); } to { transform: scale(1.3); opacity: 0; } }
+  @keyframes fly {
+    0% { transform: translate(0, 0); }
+    25% { transform: translate(-30vw, -14vh); }
+    50% { transform: translate(-60vw, 4vh); }
+    75% { transform: translate(-90vw, -12vh); }
+    100% { transform: translate(-125vw, 0); }
+  }
+
+  /* ---- 正解発表の前半：Scratch のステージ画面を重ねる（予想は隠し、正解だけを出す） ---- */
+  .stage-wrap {
+    position: fixed; inset: 0; z-index: 40; background: var(--paper);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.8vh;
+    opacity: 0; visibility: hidden; transition: opacity .5s, visibility 0s .5s;
+  }
+  .stage-wrap.on { opacity: 1; visibility: visible; transition: opacity .5s; }
+  .stage-head { display: flex; align-items: center; gap: 1.6vw; }
+  .stage-head .round { font-size: 3.4vh; }
+  .stage-head .ttl { color: #fff; font-size: 4.2vh; padding: .5vh 2vw; transform: rotate(-1.4deg); }
+  .stage-box {
+    position: relative; height: 84vh; width: 112vh; /* Scratch のステージは 4:3 */
+    border: .4vh solid var(--ink); box-shadow: 1.2vh 1.2vh 0 var(--ink); background: #000;
+  }
+  .stage-box iframe { display: block; width: 100%; height: 100%; border: 0; }
+  /* 隠した問題枠のところに、部門対抗の問題文を置く */
+  .stage-q {
+    position: absolute; left: 6%; right: 6%; top: 14%;
+    background: #fff; border: .3vh solid var(--ink); box-shadow: .7vh .7vh 0 var(--ink);
+    font-size: 3.3vh; font-weight: 900; line-height: 1.35; text-align: center; text-wrap: balance;
+    padding: 1.4vh 1.6vw; transform: rotate(-.6deg);
+  }
+  .stage-q::before {
+    content: ""; position: absolute; top: -1.4vh; left: 3vw; width: 12vh; height: 2.8vh;
+    background: var(--yellow); transform: rotate(-4deg); filter: url(#tape-edge);
+  }
+  /* 予想の欄（ゲージの左上。消せない絵の一部）に重ねる札 */
+  .stage-label {
+    position: absolute; left: .8%; top: 68.6%; width: 32.6%; height: 16.8%;
+    display: flex; align-items: center; justify-content: center;
+    --tape-bg: var(--red); color: #fff; font-size: 4.8vh; transform: rotate(-2deg);
+  }
+
+  .sound {
+    position: fixed; left: 1.2vw; bottom: 1vh; z-index: 45; border: 0; cursor: pointer;
+    font-family: var(--font-body); font-size: 2vh; font-weight: 900; color: var(--ink);
+    --tape-bg: var(--yellow); padding: .6vh 1vw;
+  }
+
   .conn {
     position: fixed; right: 1vw; bottom: .8vh; z-index: 2; font-size: 1.6vh; font-weight: 700; color: #777; opacity: .7;
   }
@@ -270,6 +336,16 @@
 </section>
 <section id="grid" class="grid"></section>
 <div id="conn" class="conn">接続中…</div>
+<!-- 正解発表の前半に重ねる Scratch のステージ画面（書き出した /stage/view/。ないときは出さない） -->
+<div id="stage-wrap" class="stage-wrap" aria-hidden="true">
+  <div class="stage-head"><span id="stage-round" class="round tape"></span><span class="ttl tape">正解発表</span></div>
+  <div class="stage-box">
+    <iframe id="stage-frame" title="Scratch のステージ画面" allow="autoplay" tabindex="-1"></iframe>
+    <div id="stage-q" class="stage-q"></div>
+    <div id="stage-label" class="stage-label tape">正解は…</div>
+  </div>
+</div>
+<button id="sound" class="sound tape" type="button">🔈 クリックすると音が出ます</button>
 
 <script>
 (function () {
@@ -277,7 +353,23 @@
 
   var POLL_MS = 1000;
   var STALE_SEC = 8;
-  var REVEAL_COUNT_MS = 3000;   // 正解発表でバルーンを数え下げる長さ（battle_host.BATTLE_REVEAL_HOLD より短く）
+  // 正解発表は2段に分ける（battle_host.BATTLE_REVEAL_HOLD はこの合計より少し長く）。
+  //   前半: Scratch のステージ画面を重ね、ゲージが伸びて正解が出るまで（約14秒）を元の演出で見せる
+  //   後半: 大画面に戻り、各部門のカードで減った数だけ風船が割れる（REVEAL_COUNT_MS）
+  var REVEAL_COUNT_MS = 3000;     // 後半: バルーンを数え下げる長さ
+  var STAGE_AFTER_CORRECT_MS = 2500;  // 前半: Scratch が正解を出してから大画面に戻るまで
+  var STAGE_TIMEOUT_MS = 18500;   // 前半: 正解が出たと分からなくても、正解発表に入ってからここで大画面に戻る（ふだんは約14秒で出る）
+  var PREPARE_WAIT_MS = 3000;     // 前半: Scratch が回答受付を組み立て終えるのを待つ上限（間に合わなければ後半だけ）
+  var STAGE_FADE_MS = 500;        // 重ねた画面を消すのにかける時間（CSS の .stage-wrap と合わせる）
+  var HUES = [0, 210, 130, 280, 30, 180, 320, 245];  // 赤い風船の絵を回して作る色（茶色っぽくなる角度は避ける）
+  var MAX_POPS = 10;              // 1枚のカードで割る風船の絵の数（減った数がこれより多くても、絵はこれだけ）
+  // Scratch の素材（書き出したステージ画面の assets/ にある。ファイル名は中身のハッシュなので変わらない）
+  var ASSET = "stage/view/assets/";
+  var BALLOON_IMG = ASSET + "d556f49616f33dd8b21f0ede627d1493.svg";  // スプライト UI のコスチューム「風船」
+  var DOVE_IMGS = [ASSET + "3c62c81bffad092bd6fd2eb1ec11a12a.svg", ASSET + "eaf17b51529da2a056f1ff467136b446.svg"];  // 割る奴_Dove-a/b
+  var POP_SOUND = ASSET + "ade40cb278092c829377131e84f0619e.wav";   // UI の「ビープ」（元は風船を数え下げるたびに音程を上げて鳴らす）
+  var DOVE_SOUND = ASSET + "87df3f473dcfa74e76a579b9c18d3070.wav";  // UI_結果演出 の「割る奴_owl」
+  var POP_GAP_MS = 70;            // 割れる音を続けて鳴らす最短の間隔（10部門が一度に割れても音が団子にならないよう）
   // 回答ページ（https://suzuleague-cloud.onrender.com/furikaeri.html）の QR。docs/qr/furikaeri.svg から写した。
   // URL を変えたら docs/development.md の「QRコード」の手順で作り直し、ここも差し替える
   var QR_VIEWBOX = "0 0 41 41";
@@ -286,7 +378,8 @@
 
   var el = function (id) { return document.getElementById(id); };
   var lastKey = null;      // 状態と問題番号。変わったときだけ組み立て直す
-  var countStart = null;   // 正解発表の数え下げを始めた時刻
+  var countStart = null;   // 正解発表の数え下げ（後半）を始めた時刻
+  var stagePhase = false;  // 正解発表の前半（Scratch の画面を重ねている）
   var current = null;
 
   function esc(s) {
@@ -295,17 +388,25 @@
     });
   }
 
+  var polling = 0, pollSeq = 0;  // 読み込み中なら始めた時刻／何回目の読み込みか
   function poll() {
+    // 前の読み込みが終わるまで次を出さない（遅れて届いた古い状態で画面が巻き戻らないように）。
+    // 10秒たてば次を出し、そのあとで届いた古いほうの返事は捨てる
+    if (polling && Date.now() - polling < 10000) return;
+    polling = Date.now();
+    var id = ++pollSeq;
     fetch("api/player/state", { cache: "no-store" })
       .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then(function (data) {
+        if (id !== pollSeq) return;
         var c = el("conn");
         if (!data.state) { c.dataset.kind = "ng"; c.textContent = "進行を管理するPCを待っています"; }
         else if (data.age > STALE_SEC) { c.dataset.kind = "ng"; c.textContent = "進行が止まっています（" + Math.round(data.age) + "秒）"; }
         else { c.dataset.kind = "ok"; c.textContent = "接続中"; }
         render(data.state);
       })
-      .catch(function () { var c = el("conn"); c.dataset.kind = "ng"; c.textContent = "サーバにつながりません"; });
+      .catch(function () { if (id !== pollSeq) return; var c = el("conn"); c.dataset.kind = "ng"; c.textContent = "サーバにつながりません"; })
+      .then(function () { if (id === pollSeq) polling = 0; });
   }
 
   // ---- 上部 ------------------------------------------------------------
@@ -334,7 +435,8 @@
       main = '<div class="question">' + q + "</div>";
       var done = s.teams.filter(function (t) { return t.answered; }).length;
       status = "回答受付中　<b>" + done + " / " + s.teams.length + "</b> 部門が回答済み";
-    } else if (s.state === STATE.OPEN) {
+    } else if (s.state === STATE.OPEN || (s.state === STATE.REVEAL && stagePhase)) {
+      // 正解発表の前半（Scratch の画面を重ねる前の待ちとフェードのあいだ）も、正解はまだ出さない
       main = '<div class="question">' + q + "</div>";
       status = "<b>予想オープン！</b>　正解は…？";
     } else if (s.state === STATE.REVEAL) {
@@ -370,6 +472,7 @@
       return '<div class="slot">' + (t.eliminated ? "（脱落）" : "考え中…") + "</div>";
     }
     var opened = s.state === STATE.OPEN || s.state === STATE.REVEAL;
+    var damageShown = s.state === STATE.REVEAL && !stagePhase;  // 前半のあいだは減る数も出さない
     if ((s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) && t.damage !== null && t.damage !== undefined) {
       return '<div class="slot"><span class="note">第' + s.round + "問 " +
         (t.damage > 0 ? "<b>−" + t.damage + "</b>" : (t.error === 0 ? "ぴったり" : "±0")) + "</span></div>";
@@ -379,7 +482,7 @@
       ? '<span class="guess">―</span>'
       : '<span class="guess">' + t.answer + "<small>%</small></span>";
     var dmg = "";
-    if (s.state === STATE.REVEAL && t.damage !== null && t.damage !== undefined) {
+    if (damageShown && t.damage !== null && t.damage !== undefined) {
       if (t.damage > 0) dmg = '<span class="dmg tape">−' + t.damage + "</span>";
       else if (t.error === 0) dmg = '<span class="dmg tape zero">ぴったり!</span>';
       else dmg = '<span class="dmg tape zero">±0</span>';  // 脱落済みで減らない
@@ -402,16 +505,34 @@
       (ranked ? '<div class="rank">' + t.rank + "位</div>" : "") + "</div>" +
       '<div class="count"><span class="n">' + start + "</span><small>個</small></div>" +
       '<div class="meter"><i style="width:' + start + '%"></i></div>' +
-      slot(s, t) +
+      slot(s, t) + pops(s, t) +
       "</div>";
   }
 
-  // 正解発表のあいだは、発表前の数から今の数へ数え下げる
-  function displayedBalloons(s, t) {
-    if (s.state !== STATE.REVEAL || countStart === null || !t.damage) return t.balloons;
+  // 後半の始めに、減る数の分（絵は MAX_POPS まで）の風船をカードに浮かべる。tick が数え下げに合わせて割る
+  function pops(s, t) {
+    if (s.state !== STATE.REVEAL || countStart === null || !(t.damage > 0)) return "";
+    var n = Math.min(t.damage, MAX_POPS), html = "";
+    for (var i = 0; i < n; i++) {
+      // 置き場所と色はカードと順番から決める（描き直しても同じ並びになる）
+      var x = ((i * 37 + t.number * 13) % 86), y = ((i * 53 + t.number * 29) % 52);
+      var hue = HUES[(i * 3 + t.number) % HUES.length];
+      html += '<span class="pop" data-at="' + ((i + 1) / n).toFixed(3) + '" style="left:' + x + "%;top:" + y +
+        "%;animation-delay:" + (i * 40) + 'ms"><i><img src="' + BALLOON_IMG + '" alt="" style="filter:hue-rotate(' + hue + 'deg) saturate(1.3)"></i></span>';
+    }
+    return '<div class="pops" aria-hidden="true">' + html + "</div>";
+  }
+
+  function countProgress() {
     var p = Math.min(1, (performance.now() - countStart) / REVEAL_COUNT_MS);
-    var eased = 1 - Math.pow(1 - p, 3);
-    return Math.round(t.balloons + t.damage * (1 - eased));
+    return 1 - Math.pow(1 - p, 3);
+  }
+
+  // 正解発表のあいだは、発表前の数から今の数へ数え下げる（前半のあいだは発表前の数のまま）
+  function displayedBalloons(s, t) {
+    if (s.state !== STATE.REVEAL || !t.damage) return t.balloons;
+    if (countStart === null) return stagePhase ? t.balloons + t.damage : t.balloons;
+    return Math.round(t.balloons + t.damage * (1 - countProgress()));
   }
 
   function renderGrid(s) {
@@ -436,30 +557,263 @@
         node.querySelector(".meter i").style.width = n + "%";
         if (t.eliminated && n === 0) node.classList.add("out");
       });
+      var eased = countProgress();
+      document.querySelectorAll(".pop:not(.gone)").forEach(function (p) {
+        if (eased + 1e-6 >= Number(p.dataset.at)) { p.classList.add("gone"); sound.pop(eased); }
+      });
     }
+    stage.watch();
     requestAnimationFrame(tick);
   }
 
+  // ---- 音（Scratch の効果音。ブラウザの決まりで、画面を1回クリックするまで鳴らせない） ------------
+
+  var sound = (function () {
+    var ctx = null, buffers = {}, lastPop = 0;
+    function load(url) {
+      fetch(url).then(function (r) { if (!r.ok) throw new Error(); return r.arrayBuffer(); })
+        .then(function (data) { return ctx.decodeAudioData(data); })
+        .then(function (buf) { buffers[url] = buf; })
+        .catch(function () { /* 素材がなければ鳴らさない */ });
+    }
+    function play(url, rate) {
+      if (!ctx || !buffers[url]) return;
+      var src = ctx.createBufferSource();
+      src.buffer = buffers[url];
+      src.playbackRate.value = rate || 1;
+      src.connect(ctx.destination);
+      src.start();
+    }
+    function unlock() {
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!ctx && Ctx) { ctx = new Ctx(); load(POP_SOUND); load(DOVE_SOUND); }
+      if (ctx && ctx.state === "suspended") ctx.resume();
+      stage.unlock();
+      el("sound").hidden = true;
+    }
+    el("sound").addEventListener("click", unlock);
+    document.addEventListener("pointerdown", unlock);
+    return {
+      // 進み具合（0〜1）に合わせて音程を上げる（元の Scratch と同じ鳴らし方）
+      pop: function (progress) {
+        var now = performance.now();
+        if (now - lastPop < POP_GAP_MS) return;
+        lastPop = now;
+        play(POP_SOUND, 1 + progress * 1.2);
+      },
+      dove: function () { play(DOVE_SOUND); },
+    };
+  })();
+
+  // 後半の始めに、Scratch の「割る奴」（鳩）を画面の右から左へ飛ばす
+  function flyDove() {
+    var img = document.createElement("img");
+    img.className = "dove"; img.src = DOVE_IMGS[0]; img.alt = "";
+    var flap = 0, timer = setInterval(function () { flap = 1 - flap; img.src = DOVE_IMGS[flap]; }, 200);
+    function done() { clearInterval(timer); img.remove(); }
+    img.addEventListener("animationend", done);
+    img.addEventListener("error", done);
+    setTimeout(done, 4000);  // 動きを減らす設定で animationend が来ないとき
+    document.body.appendChild(img);
+    sound.dove();
+  }
+
+  // ---- Scratch のステージ画面（正解発表の前半） -------------------------------
+  // 書き出した /stage/view/ を iframe で開き、同じオリジンなので中の Scratch（vm）の変数を直接書いて動かす。
+  // クラウド変数のつながりは切る（部門対抗では裏方PCが値を送らないので、サーバに残った値で動かないように）。
+  // Scratch は1チーム分の画面なので、チーム1・風船100で「回答受付」を組み立てておき、正解発表で
+  // 予想を隠し（予想%消して）、鳥を出さず（エキシビション）、ゲージが伸びて正解が出るところだけを見せる。
+  // 高専祭の札・問題文の絵・問題番号・残り・誤差は毎コマ隠し、問題文と「正解」の札は上に重ねる。
+
+  var stage = (function () {
+    var frame = el("stage-frame"), wrap = el("stage-wrap");
+    var vm = null, seq = 0, preparedQid = null, preparedAt = 0, playing = null, unlocked = false;
+    var fadeTimer = null, muteTimer = null;
+
+    function vars() { return vm.runtime.getTargetForStage().variables; }
+    function find(target, name) {
+      var vs = target.variables;
+      for (var id in vs) if (vs[id].name === name) return vs[id];
+      return null;
+    }
+    function get(name) { var v = find(vm.runtime.getTargetForStage(), name); return v ? String(v.value) : null; }
+    // 「通信」スプライトだけの変数（最後に処理した状態）
+    function seen(name) {
+      var t = vm.runtime.getSpriteTargetByName("通信"), v = t && find(t, name);
+      return v ? String(v.value) : null;
+    }
+    function set(values) {
+      // サーバに残っていた値（つなぐ前に届いたもの）と同じ番号にならないよう、今の値より先へ進める
+      seq = Math.max(seq, Number(get("☁ P2S_SEQ")) || 0) + 1;
+      values["☁ P2S_SEQ"] = seq;  // 最後に書く（Scratch は SEQ の変化を見て、ほかの値を読む）
+      var stageVars = vars();
+      Object.keys(values).forEach(function (name) {
+        for (var id in stageVars) if (stageVars[id].name === name) stageVars[id].value = String(values[name]);
+      });
+    }
+    function volume(on) {
+      var engine = vm && vm.runtime.audioEngine;
+      if (engine && engine.inputNode) engine.inputNode.gain.value = on ? 1 : 0;
+    }
+    function hideFestivalParts() {
+      vm.runtime.targets.forEach(function (t) {
+        if (t.isStage || !t.visible) return;
+        var name = t.sprite.name, costume = t.getCostumes()[t.currentCostume].name;
+        if (name === "問題" || name === "問題数" || name === "予想" || name === "UI_結果演出" || name === "GameOver" ||
+            (name === "UI" && costume !== "風船" && costume !== "カゴ") ||   // チームの札・残り・誤差・エキシビションの表示
+            (name === "UI_オーバーレイ" && costume.indexOf("問題枠") === 0) ||
+            (name === "数字" && t.x > 120)) {                                 // 右側の数字（残り・誤差）。正解は真ん中に出る
+          t.setVisible(false);
+        }
+      });
+    }
+    function attach() {
+      var win = frame.contentWindow, doc = frame.contentDocument;
+      var launch = doc && doc.getElementById("launch");
+      // 読み込みが終わると、Packager は「クリックで開始」の画面を出す
+      if (!win || !win.vm || !launch || launch.hidden) return false;
+      vm = win.vm;
+      var style = doc.createElement("style");
+      style.textContent = ".standalone-fullscreen-button, #launch { display: none !important; }";
+      doc.head.appendChild(style);
+      var vs = vars();
+      for (var id in vs) if (vs[id].name.indexOf("☁ ") === 0) vs[id].isCloud = false;
+      vm.runtime.on("AFTER_EXECUTE", hideFestivalParts);  // 描く直前に毎コマ隠す（スクリプトが出し直しても負けない）
+      volume(false);
+      launch.click();  // 緑の旗
+      if (unlocked) resume();
+      return true;
+    }
+    function resume() {
+      var engine = vm && vm.runtime.audioEngine;
+      if (engine && engine.audioContext && engine.audioContext.state === "suspended") engine.audioContext.resume();
+    }
+    // 回答受付の組み立てを Scratch が終えたか（終える前に正解発表を書くと、演出を飛ばして作り直してしまう）
+    function built(qid) {
+      // 回答中 は作り直しの終わり近くで 1 になる（前の問題の正解発表のあとは 3 か 4）。
+      // 作り直しの始めの「待つ」のあいだは 見た〜 だけが新しいので、頼んでから少したつまでは見ない
+      return performance.now() - preparedAt >= 300 && get("回答中") === "1" && seen("見たSTATE") === "3" && seen("見たQID") === String(qid) && get("復帰描画中") === "0" &&
+        get("途中復帰") === "0" && get("☁ P2S_SEQ") === seen("見たSEQ");
+    }
+    function begin(s) {
+      set({ "予想%消して": 1, "エキシビション": 1, "☁ P2S_CORRECT": s.correct, "☁ P2S_STATE": 4 });
+      el("stage-round").textContent = "第" + s.round + "問";
+      el("stage-q").textContent = s.question.text;
+      el("stage-label").textContent = "正解は…";
+      clearTimeout(muteTimer);
+      volume(true);
+      wrap.classList.add("on");
+      playing.start = performance.now();
+    }
+
+    var tries = 0, poller = setInterval(function () {
+      tries += 1;
+      try { if (attach()) clearInterval(poller); } catch (e) { /* まだ読み込み中 */ }
+      if (tries > 120) clearInterval(poller);  // 1分たっても読めなければあきらめる（後半だけで進む）
+    }, 500);
+    frame.src = "stage/view/";
+
+    return {
+      unlock: function () { unlocked = true; resume(); },
+      // 回答受付・予想オープンのあいだに、その問題の「回答受付」を組み立てておく（2〜3秒かかる）
+      prepare: function (s) {
+        if (!vm || !s.question || preparedQid === s.question.id) return;
+        preparedQid = s.question.id;
+        preparedAt = performance.now();
+        set({
+          "☁ P2S_STATE": 3, "☁ P2S_TEAM": 1, "☁ P2S_ROUND": ((s.round - 1) % 4) + 1,  // 5問目はクリアの演出が混ざるので使わない
+          "☁ P2S_QID": s.question.id, "☁ P2S_BALLOONS": 100, "☁ P2S_ANSWER": -1, "☁ P2S_CORRECT": -1,
+          "☁ P2S_FAILED_ROUND": 0,
+        });
+      },
+      // 正解発表を流せるか（組み立てを頼まずに正解発表を開いたときは流さない）
+      ready: function (s) { return !!vm && !!s.question && preparedQid === s.question.id; },
+      // 組み立てが終わっていなければ少し待ってから始める（PREPARE_WAIT_MS で間に合わなければ後半へ）
+      play: function (s, done) {
+        clearTimeout(fadeTimer);
+        playing = { s: s, asked: performance.now(), start: null, shown: null, done: done };
+        if (built(s.question.id)) begin(s);
+      },
+      // tick から毎コマ呼ぶ。正解が出たら（回答中 が 3 になる）少し見せてから大画面に戻る
+      watch: function () {
+        if (!playing) return;
+        var now = performance.now(), finish = false;
+        if (playing.start === null) {
+          if (built(playing.s.question.id)) begin(playing.s);
+          else if (now - playing.asked >= PREPARE_WAIT_MS) finish = true;
+        } else {
+          if (playing.shown === null && get("回答中") === "3") {
+            playing.shown = now;
+            el("stage-label").textContent = "正解 ▶";
+          }
+          finish = (playing.shown !== null && now - playing.shown >= STAGE_AFTER_CORRECT_MS) ||
+            now - playing.asked >= STAGE_TIMEOUT_MS;
+        }
+        if (finish) {
+          var done = playing.done, shownStage = playing.start !== null;
+          this.stop();
+          if (shownStage) fadeTimer = setTimeout(done, STAGE_FADE_MS);
+          else done();
+        }
+      },
+      stop: function () {
+        playing = null;
+        clearTimeout(fadeTimer);
+        wrap.classList.remove("on");
+        clearTimeout(muteTimer);
+        muteTimer = setTimeout(function () { volume(false); }, STAGE_FADE_MS);
+      },
+    };
+  })();
+
+  // 正解発表の後半：カードを描き直して（予想のめくりと風船を出す）数え下げを始める
+  function startCount() {
+    var s = current;
+    stagePhase = false;
+    if (!s || s.state !== STATE.REVEAL) return;
+    countStart = performance.now();
+    renderTop(s);
+    renderGrid(s);
+    if (s.teams.some(function (t) { return t.damage > 0; })) flyDove();
+  }
+
   function render(s) {
-    if (!s) { current = null; lastKey = null; el("grid").innerHTML = ""; el("main").innerHTML = '<div class="question small">まもなく始まります</div>'; return; }
+    if (!s || s.mode !== "battle") {
+      if (stagePhase) { stagePhase = false; stage.stop(); }
+      current = null; lastKey = null; render.sig = null;
+    }
+    if (!s) { el("grid").innerHTML = ""; el("main").innerHTML = '<div class="question small">まもなく始まります</div>'; return; }
     if (s.mode !== "battle") {
       el("grid").innerHTML = '<div class="empty">いまは部門対抗モードではありません</div>';
       el("main").innerHTML = ""; el("status").textContent = ""; return;
     }
     var key = s.state + ":" + s.round;
     var answered = s.teams.map(function (t) { return t.answered ? 1 : 0; }).join("");
-    var fresh = key !== lastKey;
-    if (fresh && s.state === STATE.REVEAL) countStart = performance.now();
-    if (fresh) countStart = s.state === STATE.REVEAL ? countStart : null;
-    current = s;
     // 回答受付中は回答済みの印だけが変わるので、変わったときに描き直す
     var sig = key + "|" + answered + "|" + s.teams.length + "|" + s.teams.map(function (t) { return t.number; }).join(",");
+    var fresh = key !== lastKey;
+    current = s;
+    lastKey = key;
+    if (s.state === STATE.ANSWERING || s.state === STATE.OPEN) stage.prepare(s);
+    if (fresh) {
+      countStart = null;
+      if (stagePhase) { stagePhase = false; stage.stop(); }  // 前半の途中で進んだ（開き直し・送り直し）
+      if (s.state === STATE.REVEAL) {
+        if (stage.ready(s)) {
+          stagePhase = true;  // 大画面は発表前の数のまま、上に Scratch の画面を重ねる。終わったら startCount
+          stage.play(s, startCount);
+        } else {
+          startCount();  // Scratch の画面がない・間に合わないときは、すぐ後半へ
+          render.sig = sig;
+          return;
+        }
+      }
+    }
     if (fresh || sig !== render.sig) {
       renderTop(s);
       renderGrid(s);
       render.sig = sig;
     }
-    lastKey = key;
   }
 
   poll();
