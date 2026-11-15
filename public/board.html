@@ -151,6 +151,8 @@
   .qr svg { display: block; width: 23vh; height: 23vh; background: #fff; padding: .6vh; }
   .qr div { font-size: 2.7vh; font-weight: 700; line-height: 1.7; }
   .qr div b { --tape-bg: var(--blue); color: #fff; font-size: 3vh; padding: .4vh 1.2vw; margin-bottom: 1.2vh; transform: rotate(-2deg); }
+  .qr .teams { display: block; margin-top: 1.2vh; font-size: 3vh; font-weight: 900; }
+  .qr .teams em { font-style: normal; color: var(--red); }
   .status-line { text-align: center; font-size: 3.2vh; font-weight: 700; }
   .status-line b { font-weight: 900; color: var(--red); }
 
@@ -322,8 +324,9 @@
         "外れた差の分だけ <b>バルーンが割れる</b>。持ち点は <b>100</b><br>" +
         "最後に <b>残りバルーンが一番多い部門</b> が優勝！</div>" +
         '<div class="qr"><span class="code tape"><svg viewBox="' + QR_VIEWBOX + '" aria-label="回答ページのQRコード"><path fill="#000" d="' + QR_PATH + '"/></svg></span>' +
-        "<div><b class=\"tape\">入力係のスマホで読み取る</b><br>回答ページで、自分の部門の<br>ボタンを押してください</div></div>";
-      status = "参加 " + s.teams.length + " 部門";
+        "<div><b class=\"tape\">入力係のスマホで読み取る</b><br>回答ページで、自分の部門の<br>ボタンを押してください" +
+        // 参加数は下の欄でなく QR の横に出す（10部門を2段に並べると、下の欄がカードの裏に隠れる）
+        '<span class="teams">参加 <em>' + s.teams.length + "</em> 部門</span></div></div>";
     } else if (s.state === STATE.QUESTION) {
       main = '<div class="question">' + q + "</div>";
       status = "問題をよく聞いてください";
