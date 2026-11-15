@@ -31,7 +31,8 @@
   /* 画面は 16:10 より横長を前提に作ってある。4:3 などの縦長の画面では、横幅に合わせた 16:10 の枠に
      収めて上下を余白にする（崩れないように）。中の寸法は vh ではなく、枠の高さの 1% の --h を単位にして書く
      （16:10 より横長の画面では --h は 1vh と同じ） */
-  :root { --h: min(1vh, .625vw); }
+  /* --band は 4:3 などで枠の上下にできる余白の高さ（16:10 より横長なら 0）。★の飾りと鳩は、これを足して枠を基準に置く（中身に重ならない位置） */
+  :root { --h: min(1vh, .625vw); --band: calc((100vh - 100 * var(--h)) / 2); }
   html {
     margin: 0; height: 100%; background: var(--paper);
     display: flex; align-items: center;
@@ -87,9 +88,8 @@
     filter: url(#torn-edge);
   }
   .deco.star { font-family: var(--font-num); line-height: 1; }
-  .deco.s1 { top: calc(14 * var(--h)); right: 2vw; font-size: calc(6 * var(--h)); color: var(--red); transform: rotate(14deg); }
-  .deco.s2 { bottom: calc(4 * var(--h)); left: 47vw; font-size: calc(4 * var(--h)); color: var(--yellow); transform: rotate(-12deg); }
-  .deco.s3 { top: calc(1.6 * var(--h)); left: 44vw; font-size: calc(3.4 * var(--h)); color: var(--blue); transform: rotate(8deg); }
+  .deco.s1 { top: calc(var(--band) + 10 * var(--h)); right: .3vw; font-size: calc(5 * var(--h)); color: var(--red); transform: rotate(14deg); }
+  .deco.s3 { top: calc(var(--band) + 1.6 * var(--h)); left: 44vw; font-size: calc(3.4 * var(--h)); color: var(--blue); transform: rotate(8deg); }
 
   /* ---- 上部（タイトル・問題・正解） ---- */
   .top, .grid { position: relative; z-index: 1; }
@@ -251,7 +251,7 @@
     animation: spark .28s ease-out forwards;
   }
   .dove {
-    position: fixed; z-index: 30; top: calc(52 * var(--h)); left: 100vw; width: calc(16 * var(--h)); pointer-events: none;
+    position: fixed; z-index: 30; top: calc(var(--band) + 52 * var(--h)); left: 100vw; width: calc(16 * var(--h)); pointer-events: none;
     animation: fly 2.6s linear forwards;
   }
   @keyframes pop-in { from { transform: scale(0); } }
@@ -337,7 +337,6 @@
 <div class="deco stripe" aria-hidden="true"></div>
 <div class="deco bluedots" aria-hidden="true"></div>
 <div class="deco star s1" aria-hidden="true">★</div>
-<div class="deco star s2" aria-hidden="true">★</div>
 <div class="deco star s3" aria-hidden="true">★</div>
 <section class="top">
   <div class="bar">
