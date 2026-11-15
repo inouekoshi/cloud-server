@@ -121,12 +121,14 @@
   td.num { text-align: right; white-space: nowrap; font-family: var(--font-num); font-size: 22px; line-height: 1; font-weight: 400; }
   td.num:first-child { text-align: left; font-family: var(--font-body); font-size: 15px; font-weight: 900; }
   tr.me td { background: var(--yellow); font-weight: 900; }
-  .teams-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  /* 2列に固定し、最長の「ステージイベント」（8文字）が 320幅でも1行に入るよう文字を画面幅に合わせて縮める。
+     縮めても入らない書体のときは、はみ出さずに折り返す */
+  .teams-pick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
   .teams-pick button {
-    min-height: 58px; border: 2px solid var(--ink); border-left: 10px solid var(--c, var(--red)); border-radius: 0;
-    background: #fff; color: var(--ink); font-family: var(--font-body); font-size: 16px; font-weight: 900;
-    padding: 4px 6px; box-shadow: 3px 3px 0 var(--ink); touch-action: manipulation; white-space: nowrap;
-    -webkit-tap-highlight-color: transparent;
+    min-width: 0; min-height: 58px; border: 2px solid var(--ink); border-left: 8px solid var(--c, var(--red)); border-radius: 0;
+    background: #fff; color: var(--ink); font-family: var(--font-body); font-size: clamp(12px, 3.8vw, 16px); font-weight: 900;
+    line-height: 1.25; padding: 4px; box-shadow: 3px 3px 0 var(--ink); touch-action: manipulation;
+    overflow-wrap: anywhere; -webkit-tap-highlight-color: transparent;
   }
   .teams-pick button:nth-child(4n+2) { --c: var(--blue); }
   .teams-pick button:nth-child(4n+3) { --c: var(--yellow); }
@@ -296,20 +298,27 @@
     el("send").disabled = typed === "" || sending || !s || s.state !== STATE.ANSWERING;
   }
 
+  // 回答欄の下の一言（kind: "" ふつう／"ok" 届いた／"ng" 失敗）
+  function setStatus(kind, text) { var a = el("a-status"); a.dataset.kind = kind; a.textContent = text; }
+
   el("send").addEventListener("click", function () {
     var s = current;
     if (!s || !s.question || typed === "") return;
     var value = Number(typed), qid = s.question.id;
     sending = true; drawReadout();
-    el("a-status").textContent = "送っています…"; el("a-status").dataset.kind = "";
+    setStatus("", "送っています…");
     postJson("api/player/answer", { team: teamNo, value: value, question_id: qid })
       .then(function () {
         // サーバは預かった時点で返事をする。進行のPCが受け付けたかは、次の状態で確かめる
         sent = { qid: qid, value: value, at: Date.now() };
-        el("a-status").dataset.kind = "";
-        el("a-status").textContent = value + "% を送りました。届いたか確かめています…";
+        setStatus("", value + "% を送りました。届いたか確かめています…");
       })
-      .catch(function (e) { el("a-status").dataset.kind = "ng"; el("a-status").textContent = e.message; })
+      .catch(function (e) {
+        // 電波が切れたときの fetch の失敗は英語の文（Failed to fetch など）なので、日本語に置き換える
+        setStatus("ng", e instanceof TypeError
+          ? "送れませんでした。電波を確かめて、もう一度「この数字で回答する」を押してください"
+          : e.message);
+      })
       .then(function () { sending = false; drawReadout(); });
   });
 
@@ -342,7 +351,10 @@
     if (needTeam) { drawPick(s); return; }
     var mine = s && s.teams ? s.teams.filter(function (t) { return t.number === teamNo; })[0] : null;
     el("team-name").textContent = mine ? mine.name : "部門" + teamNo;
-    el("balloons").textContent = mine ? mine.balloons : "-";
+    // 正解発表のあいだは、大画面の演出（Scratch のゲージ→風船が割れる。約20秒）より先に答えが分からないよう、
+    // 減る前の数のままにする（減った数と正解は途中順位で出す）
+    var hiding = !!(s && mine && s.state === STATE.REVEAL);
+    el("balloons").textContent = mine ? mine.balloons + (hiding && mine.damage ? mine.damage : 0) : "-";
 
     show("answer-card", false); show("result-card", false); show("rank-card", false); show("msg", true);
     if (!s) { message("準備中", "進行を管理するPCを待っています。"); return; }
@@ -351,7 +363,7 @@
 
     var q = s.question ? s.question.text : "";
     var qid = s.question ? s.question.id : null;
-    if (typedFor !== qid) { typed = ""; typedFor = qid; el("a-status").textContent = ""; }
+    if (typedFor !== qid) { typed = ""; typedFor = qid; setStatus("", ""); }
     if (sent && sent.qid !== qid) sent = null;
 
     if (s.state === STATE.IDLE) {
@@ -364,41 +376,39 @@
       el("a-question").textContent = q;
       if (sent && !sending) {
         if (mine.answered && Date.now() - sent.at > 1500) {
-          el("a-status").dataset.kind = "ok";
-          el("a-status").textContent = sent.value + "% で回答しました（締め切りまでは直せます）";
+          setStatus("ok", sent.value + "% で回答しました（締め切りまでは直せます）");
         } else if (Date.now() - sent.at > 8000) {
-          el("a-status").dataset.kind = "ng";
-          el("a-status").textContent = "回答が届いていないかもしれません。もう一度送るか、司会に伝えてください";
+          setStatus("ng", "回答が届いていないかもしれません。もう一度送るか、司会に伝えてください");
         }
       }
       drawReadout();
     } else if (s.state === STATE.OPEN) {
-      var body = mine.answer === null ? "この問題は未回答でした（予想50とみなします）" : "あなたの部門の予想は " + mine.answer + "%。大画面を見てください。";
+      var body = mine.answer == null ? "この問題は未回答でした（予想50とみなします）" : "あなたの部門の予想は " + mine.answer + "%。大画面を見てください。";
       if (sent && sent.qid === qid && mine.answer !== sent.value) {
         body += "（最後に送った " + sent.value + "% は締め切りに間に合いませんでした）";
       }
       message("予想オープン！", body, q);
-    } else if (s.state === STATE.REVEAL || s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) {
+    } else if (s.state === STATE.REVEAL) {
+      message("正解発表！", "大画面を見てください。結果は途中順位でここにも出ます。", q);
+    } else if (s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) {
       show("msg", s.state === STATE.FINISHED);
       if (s.state === STATE.FINISHED) {
         var won = s.winners.some(function (w) { return w.number === teamNo; });
         message(won ? "優勝おめでとうございます！" : "最終結果", "あなたの部門は " + mine.rank + " 位でした。");
       }
-      if (mine.error !== null && mine.error !== undefined) {
+      if (mine.error != null) {
         show("result-card", true);
         el("r-title").textContent = "第" + s.round + "問の結果";
-        el("r-answer").textContent = mine.answer === null ? "―" : mine.answer + "%";
+        el("r-answer").textContent = mine.answer == null ? "―" : mine.answer + "%";
         el("r-correct").textContent = s.correct + "%";
         el("r-damage").textContent = mine.damage;
       }
-      if (s.state !== STATE.REVEAL) {
-        show("rank-card", true);
-        var teams = s.teams.slice().sort(function (a, b) { return (a.rank - b.rank) || (a.number - b.number); });
-        el("rank-rows").innerHTML = teams.map(function (t) {
-          return '<tr class="' + (t.number === teamNo ? "me" : "") + '"><td class="num">' + t.rank + "位</td><td>" +
-            esc(t.name) + (t.eliminated ? "（脱落）" : "") + '</td><td class="num">' + t.balloons + "</td></tr>";
-        }).join("");
-      }
+      show("rank-card", true);
+      var teams = s.teams.slice().sort(function (a, b) { return (a.rank - b.rank) || (a.number - b.number); });
+      el("rank-rows").innerHTML = teams.map(function (t) {
+        return '<tr class="' + (t.number === teamNo ? "me" : "") + '"><td class="num">' + t.rank + "位</td><td>" +
+          esc(t.name) + (t.eliminated ? "（脱落）" : "") + '</td><td class="num">' + t.balloons + "</td></tr>";
+      }).join("");
     }
   }
 

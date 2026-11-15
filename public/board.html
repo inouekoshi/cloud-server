@@ -107,6 +107,7 @@
   .question {
     position: relative; max-width: 86vw;
     font-size: 5.2vh; font-weight: 900; line-height: 1.4; text-wrap: balance;
+    word-break: auto-phrase;  /* 「未来」などの言葉の途中で改行しない（Chrome。ほかのブラウザでは無視される） */
     background: #fff; border: .3vh solid var(--ink); box-shadow: .9vh .9vh 0 var(--ink);
     padding: 2.4vh 2.8vw 2.2vh; transform: rotate(-.6deg);
   }
@@ -127,7 +128,7 @@
   .correct b small { font-size: 9vh; }
   .headline { color: #fff; font-size: 6.6vh; letter-spacing: .04em; padding: 1.2vh 2.6vw; transform: rotate(-1.2deg); }
   .headline.win {
-    --tape-bg: var(--red); font-size: 8.6vh; padding: 1.4vh 3vw;
+    --tape-bg: var(--red); font-size: 8.6vh; padding: 1.4vh 3vw; white-space: nowrap;
     animation: pop .6s cubic-bezier(.2,1.6,.4,1);
   }
   .win-wrap { display: flex; align-items: center; gap: 2vw; }
@@ -189,10 +190,13 @@
   }
   .head { display: flex; align-items: center; gap: .6vw; }
   .name {
-    flex: 1; min-width: 0; font-size: 2.8vh; font-weight: 900; line-height: 1.25; white-space: nowrap;
+    /* 横幅の狭い画面（4:3 など）でも最長の「ステージイベント」が1行に入るよう、幅でも上限を決める */
+    flex: 1; min-width: 0; font-size: min(2.8vh, 1.75vw); font-weight: 900; line-height: 1.25; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
   }
-  .rank { flex: none; font-size: 2.6vh; font-weight: 900; }
+  .count-row { display: flex; align-items: flex-end; justify-content: space-between; gap: .6vw; }
+  .side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: .8vh; padding-bottom: .4vh; }
+  .rank { flex: none; font-size: 3.2vh; font-weight: 900; line-height: 1; }
   .card.top1 .rank { color: var(--red); }
   .count {
     font-family: var(--font-num); font-size: 9.6vh; line-height: .9; color: var(--red);
@@ -272,7 +276,7 @@
   .stage-q {
     position: absolute; left: 6%; right: 6%; top: 14%;
     background: #fff; border: .3vh solid var(--ink); box-shadow: .7vh .7vh 0 var(--ink);
-    font-size: 3.3vh; font-weight: 900; line-height: 1.35; text-align: center; text-wrap: balance;
+    font-size: 3.3vh; font-weight: 900; line-height: 1.35; text-align: center; text-wrap: balance; word-break: auto-phrase;
     padding: 1.4vh 1.6vw; transform: rotate(-.6deg);
   }
   .stage-q::before {
@@ -295,7 +299,8 @@
   .conn {
     position: fixed; right: 1vw; bottom: .8vh; z-index: 2; font-size: 1.6vh; font-weight: 700; color: #777; opacity: .7;
   }
-  .conn[data-kind="ng"] { color: var(--red); opacity: 1; }
+  /* つながらないときは、隅の飾り（青い点）より手前に、白地で目立たせる（裏方が気づけるように） */
+  .conn[data-kind="ng"] { z-index: 46; color: var(--red); opacity: 1; background: #fff; border: .25vh solid var(--red); padding: .3vh .8vw; font-size: 2vh; }
   .empty { margin: auto; font-size: 4vh; font-weight: 900; }
 
   @keyframes pop { from { transform: scale(.6); opacity: 0; } to { opacity: 1; } }
@@ -388,6 +393,8 @@
     });
   }
 
+  function setConn(kind, text) { var c = el("conn"); c.dataset.kind = kind; c.textContent = text; }
+
   var polling = 0, pollSeq = 0;  // 読み込み中なら始めた時刻／何回目の読み込みか
   function poll() {
     // 前の読み込みが終わるまで次を出さない（遅れて届いた古い状態で画面が巻き戻らないように）。
@@ -399,13 +406,12 @@
       .then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.json(); })
       .then(function (data) {
         if (id !== pollSeq) return;
-        var c = el("conn");
-        if (!data.state) { c.dataset.kind = "ng"; c.textContent = "進行を管理するPCを待っています"; }
-        else if (data.age > STALE_SEC) { c.dataset.kind = "ng"; c.textContent = "進行が止まっています（" + Math.round(data.age) + "秒）"; }
-        else { c.dataset.kind = "ok"; c.textContent = "接続中"; }
+        if (!data.state) setConn("ng", "進行を管理するPCを待っています");
+        else if (data.age > STALE_SEC) setConn("ng", "進行が止まっています（" + Math.round(data.age) + "秒）");
+        else setConn("ok", "接続中");
         render(data.state);
       })
-      .catch(function () { if (id !== pollSeq) return; var c = el("conn"); c.dataset.kind = "ng"; c.textContent = "サーバにつながりません"; })
+      .catch(function () { if (id === pollSeq) setConn("ng", "サーバにつながりません"); })
       .then(function () { if (id === pollSeq) polling = 0; });
   }
 
@@ -446,9 +452,14 @@
       main = '<div class="headline tape">第' + s.round + "問 終了　途中順位</div>";
       status = s.round < s.rounds ? "あと " + (s.rounds - s.round) + " 問" : "次は最終結果！";
     } else if (s.state === STATE.FINISHED) {
-      var names = s.winners.map(function (w) { return esc(w.name); }).join("・");
-      main = names
-        ? '<div class="win-wrap"><span class="star l">★</span><div class="headline tape win">優勝　' + names + '！</div><span class="star r">★</span></div>'
+      // 同率優勝で名前が長くなっても1行に収める（折り返すと下の文字がカードの裏に隠れる）。
+      // 4部門以上が並んだら名前は出さず、黄色い1位のカードで見せる
+      var names = s.winners.length > 3 ? s.winners.length + "部門が同率"
+        : s.winners.map(function (w) { return w.name; }).join("・");
+      var chars = 4 + names.length;  // 「優勝　」と「！」の分を足す（エスケープする前の文字数で数える）
+      main = s.winners.length
+        ? '<div class="win-wrap"><span class="star l">★</span><div class="headline tape win" style="font-size:min(8.6vh,' +
+          (64 / chars).toFixed(2) + 'vw)">優勝　' + esc(names) + '！</div><span class="star r">★</span></div>'
         : '<div class="headline tape">最終結果</div>';
       status = "おつかれさまでした";
     }
@@ -458,9 +469,12 @@
 
   // ---- 部門のカード ----------------------------------------------------
 
+  // 途中順位と最終結果は順位で並べ、順位を出す
+  function isRanked(s) { return s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED; }
+
   function ordered(s) {
     var teams = s.teams.slice();
-    if (s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) {
+    if (isRanked(s)) {
       teams.sort(function (a, b) { return (a.rank - b.rank) || (a.number - b.number); });
     }
     return teams;
@@ -473,16 +487,16 @@
     }
     var opened = s.state === STATE.OPEN || s.state === STATE.REVEAL;
     var damageShown = s.state === STATE.REVEAL && !stagePhase;  // 前半のあいだは減る数も出さない
-    if ((s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) && t.damage !== null && t.damage !== undefined) {
+    if (isRanked(s) && t.damage != null) {
       return '<div class="slot"><span class="note">第' + s.round + "問 " +
         (t.damage > 0 ? "<b>−" + t.damage + "</b>" : (t.error === 0 ? "ぴったり" : "±0")) + "</span></div>";
     }
     if (!opened) return '<div class="slot"></div>';
-    var guess = t.answer === null || t.answer === undefined
+    var guess = t.answer == null
       ? '<span class="guess">―</span>'
       : '<span class="guess">' + t.answer + "<small>%</small></span>";
     var dmg = "";
-    if (damageShown && t.damage !== null && t.damage !== undefined) {
+    if (damageShown && t.damage != null) {
       if (t.damage > 0) dmg = '<span class="dmg tape">−' + t.damage + "</span>";
       else if (t.error === 0) dmg = '<span class="dmg tape zero">ぴったり!</span>';
       else dmg = '<span class="dmg tape zero">±0</span>';  // 脱落済みで減らない
@@ -493,17 +507,19 @@
   function card(s, t) {
     var cls = ["card"];
     if (s.state === STATE.ANSWERING && t.answered) cls.push("answered");
-    // 正解発表では、数え下げが0に届いたときに灰色にする（tick）
-    if (t.eliminated && s.state !== STATE.REVEAL) cls.push("out");
-    var ranked = s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED;
+    // この問題で脱落する部門は、正解発表の数え下げが0に届いたときに灰色にする（tick）。前の問題までに脱落した部門は最初から灰色
+    var outNow = t.eliminated && (s.state !== STATE.REVEAL || !(t.damage > 0));
+    if (outNow) cls.push("out");
+    var ranked = isRanked(s);
     if (ranked && t.rank === 1) cls.push("top1");
     var start = displayedBalloons(s, t);
     return '<div class="' + cls.join(" ") + '" data-team="' + t.number + '">' +
-      '<div class="head"><div class="name">' + esc(t.name) + "</div>" +
-      // 脱落は部門名の横に小さく出す（下の欄に重ねると文字が隠れる。正解発表では数え下げが0に届いてから灰色にする）
-      (t.eliminated && s.state !== STATE.REVEAL ? '<div class="badge tape">脱落</div>' : "") +
-      (ranked ? '<div class="rank">' + t.rank + "位</div>" : "") + "</div>" +
-      '<div class="count"><span class="n">' + start + "</span><small>個</small></div>" +
+      '<div class="head"><div class="name">' + esc(t.name) + "</div></div>" +
+      // 脱落の札と順位は数字の右に出す（部門名の横に置くと「ステージイベント」が切れる。
+      // 下の欄に重ねると文字が隠れる。正解発表では数え下げが0に届いてから灰色にする）
+      '<div class="count-row"><div class="count"><span class="n">' + start + "</span><small>個</small></div>" +
+      '<div class="side">' + (outNow ? '<div class="badge tape">脱落</div>' : "") +
+      (ranked ? '<div class="rank">' + t.rank + "位</div>" : "") + "</div></div>" +
       '<div class="meter"><i style="width:' + start + '%"></i></div>' +
       slot(s, t) + pops(s, t) +
       "</div>";

@@ -293,8 +293,8 @@
         var mark = t.answered ? '<span class="yes">' + t.answer + "%</span>" : (t.eliminated ? '<span class="muted">脱落</span>' : '<span class="no">まだ</span>');
         return '<tr class="' + cls + '"><td class="name">' + esc(t.name) + '</td><td class="num">' + mark + '</td><td class="num">' + t.balloons + "</td></tr>";
       }
-      var extra = (t.answer !== null && t.answer !== undefined) ? t.answer + "%" : "";
-      if (t.damage !== null && t.damage !== undefined) extra += "（−" + t.damage + "）";
+      var extra = t.answer != null ? t.answer + "%" : "";
+      if (t.damage != null) extra += "（−" + t.damage + "）";
       return '<tr class="' + cls + '"><td class="num">' + (t.rank || "") + '位</td><td class="name">' + esc(t.name) +
         (t.eliminated ? "（脱落）" : "") + '</td><td class="num muted">' + extra + '</td><td class="num">' + t.balloons + "</td></tr>";
     }).join("");
@@ -329,7 +329,7 @@
         pending = { seq: data.seq, at: Date.now() };
         if (data.result) { lastShownSeq = data.seq; toast(data.result.ok ? "ok" : "ng", data.result.message); pending = null; poll(); }
       })
-      .catch(function (err) { pending = null; toast("ng", "送れませんでした（" + err.message + "）"); updateButtons(); });
+      .catch(function (err) { pending = null; toast("ng", err instanceof TypeError ? "送れませんでした。電波を確かめて、もう一度押してください" : "送れませんでした（" + err.message + "）"); updateButtons(); });
   }
 
   el("next-btn").addEventListener("click", function () {
