@@ -22,6 +22,9 @@
 > uv run python -m suzuleague.publish --room-id 1364239598 --check  # 本番と照合
 > ```
 >
+> ふだんは手で書き出さなくてよい。`.github/workflows/sync-suzuleague-pages.yml` が10分おきに進行システムの main から書き出し、
+> 変わったファイルがあればコミットして push し、本番と照合する（急ぐときは Actions の画面から手動で実行する）。
+>
 > **master に push すると Render が本番に自動デプロイする**（約90秒）。API の仕様は進行システムの
 > [docs/protocol.md](https://github.com/suzuka-kosen-festa/2026-suzuleague/blob/main/docs/protocol.md#https-apiスマホの画面と裏方pc) を参照。
 >

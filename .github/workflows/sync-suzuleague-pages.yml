@@ -1,0 +1,205 @@
+# スズリーグの画面（public/ の6ページ）を、進行システムのリポジトリから自動で取り込む。
+#
+# 10分おきに suzuka-kosen-festa/2026-suzuleague の main を取ってきて `publish` で書き出し、
+# 変わったファイルがあればコミットして master に push する。
+# Render は master への push で自動デプロイするので、そのあと本番と照合する（`publish --check`）。
+#
+# - 差分がなければコミットも push もしない（docs だけの変更などでは何も起きない）
+# - suzuleague 側の Secrets は要らない（このリポジトリの GITHUB_TOKEN で push する）
+# - 急ぐときは Actions の画面から「Run workflow」で手動実行できる
+# - サーバ側（hostApi.js など）の変更が要る画面は、先にこのリポジトリへサーバの変更を入れてから
+#   suzuleague に push すること（逆だと回答がすべて弾かれる）
+#
+# 別リポジトリのコードを動かすジョブ（build・verify）には書き込み権限を渡さない。
+# push するジョブは、build が作った6ファイルを受け取ってコミットするだけで、suzuleague のコードは動かさない。
+name: スズリーグの画面を取り込む
+
+on:
+  schedule:
+    # 毎時0分は GitHub の定期実行が混むので、3分ずらす
+    - cron: "3-59/10 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# 前の実行と重なると push がぶつかるので、1本ずつ動かす
+concurrency:
+  group: sync-suzuleague-pages
+  cancel-in-progress: false
+
+env:
+  ROOM_ID: "1364239598"
+  PRODUCTION_URL: https://suzuleague-cloud.onrender.com
+  # publish.py の build_pages() が書き出すファイル。増やしたらここも足す
+  PAGES: suzuleague.html host.html player.html board.html furikaeri.html furikaeri-host.html
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+      sha: ${{ steps.diff.outputs.sha }}
+      subject: ${{ steps.diff.outputs.subject }}
+    steps:
+      - name: cloud-server を取ってくる
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          path: cloud-server
+          persist-credentials: false
+
+      - name: suzuleague の main を取ってくる
+        uses: actions/checkout@v4
+        with:
+          repository: suzuka-kosen-festa/2026-suzuleague
+          ref: main
+          path: suzuleague
+          persist-credentials: false
+
+      - name: uv を入れる
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: suzuleague/uv.lock
+
+      - name: public/ に書き出す
+        working-directory: suzuleague
+        run: |
+          uv run --frozen python -m suzuleague.publish \
+            --room-id "$ROOM_ID" --server-dir "$GITHUB_WORKSPACE/cloud-server"
+
+      - name: 本番の画面と差分があるか調べる
+        id: diff
+        run: |
+          echo "sha=$(git -C suzuleague rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "subject=$(git -C suzuleague log -1 --format=%s)" >> "$GITHUB_OUTPUT"
+          mkdir pages
+          for p in $PAGES; do cp "cloud-server/public/$p" pages/; done
+          # PAGES に載っていないファイルが書き出されたら、取り込み漏れになるので止める
+          unknown=$(git -C cloud-server status --porcelain -- public | awk '{print $2}' | sed 's|^public/||' \
+            | grep -vxF -f <(printf '%s\n' $PAGES) || true)
+          if [ -n "$unknown" ]; then
+            echo "::error::PAGES にないファイルが書き出されました: $unknown（ワークフローの PAGES に足してください）"
+            exit 1
+          fi
+          if [ -z "$(git -C cloud-server status --porcelain -- public)" ]; then
+            echo "本番の画面と差分がないので、ここで終わります"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git -C cloud-server status --short -- public
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 書き出した画面を次のジョブに渡す
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages
+          path: pages/
+          retention-days: 3
+
+  push:
+    needs: build
+    if: needs.build.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      pushed: ${{ steps.commit.outputs.pushed }}
+    steps:
+      - name: cloud-server を取ってくる
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: 書き出した画面を受け取る
+        uses: actions/download-artifact@v4
+        with:
+          name: pages
+          path: ${{ runner.temp }}/pages
+
+      - name: 変わったファイルをコミットして push する
+        id: commit
+        env:
+          SHA: ${{ needs.build.outputs.sha }}
+          SUBJECT: ${{ needs.build.outputs.subject }}
+        run: |
+          if ! [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::suzuleague の版（$SHA）がコミットの形をしていません"; exit 1
+          fi
+          # 決めた6ファイルだけを、ふつうのファイルとして置く（それ以外は受け取っても使わない）
+          for p in $PAGES; do
+            src="$RUNNER_TEMP/pages/$p"
+            if [ ! -f "$src" ] || [ -L "$src" ]; then
+              echo "::error::$p を受け取れませんでした"; exit 1
+            fi
+            cp "$src" "public/$p"
+          done
+          for p in $PAGES; do git add -- "public/$p"; done
+          if git diff --cached --quiet; then
+            echo "差分がなくなっていました（手元から先に反映された）"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --cached --stat
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "画面を自動で更新: ${SUBJECT}（suzuleague ${SHA:0:7}）"
+          # 実行中に手元から push されていても通るように、取り込み直してから push する
+          git pull --rebase origin master
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/master)" ]; then
+            echo "手元から同じ内容が先に反映されていたので、push しません"
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git push origin HEAD:master
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: [build, push]
+    if: needs.push.outputs.pushed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: suzuleague の同じ版を取ってくる
+        uses: actions/checkout@v4
+        with:
+          repository: suzuka-kosen-festa/2026-suzuleague
+          ref: ${{ needs.build.outputs.sha }}
+          persist-credentials: false
+
+      - name: uv を入れる
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: 依存を入れておく
+        run: uv sync --frozen
+
+      - name: デプロイを待って本番と照合する
+        run: |
+          # Render の反映には60〜90秒かかる。60秒待ってから、最大およそ10分試し直す
+          sleep 60
+          deadline=$(( $(date +%s) + 600 ))
+          i=1
+          while :; do
+            # Render が応答しないと1回の照合が長引くので、1回あたり3分で打ち切る
+            if timeout 180 uv run --no-sync python -m suzuleague.publish \
+                 --room-id "$ROOM_ID" --check --url "$PRODUCTION_URL"; then
+              exit 0
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then break; fi
+            echo "まだ反映されていません（${i}回目）。30秒後に試し直します"
+            i=$((i + 1))
+            sleep 30
+          done
+          echo "::error::本番の画面が更新されません。Render の管理画面から手動でデプロイしてください"
+          exit 1
