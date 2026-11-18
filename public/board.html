@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>スズリーグ 部門対抗</title>
+<title>部門対抗 スズリーグ</title>
 <!--
   部門対抗モード（振り返り会 2026-12-03）の大画面。プロジェクターに映す、入力のない画面。
   Render（cloud-server の public/board.html）から配信し、1秒ごとに公開用の状態（api/player/state）を読む。
@@ -31,7 +31,7 @@
   /* 画面は 16:10 より横長を前提に作ってある。4:3 などの縦長の画面では、横幅に合わせた 16:10 の枠に
      収めて上下を余白にする（崩れないように）。中の寸法は vh ではなく、枠の高さの 1% の --h を単位にして書く
      （16:10 より横長の画面では --h は 1vh と同じ） */
-  /* --band は 4:3 などで枠の上下にできる余白の高さ（16:10 より横長なら 0）。★の飾りと鳩は、これを足して枠を基準に置く（中身に重ならない位置） */
+  /* --band は 4:3 などで枠の上下にできる余白の高さ（16:10 より横長なら 0）。★の飾りは、これを足して枠を基準に置く（中身に重ならない位置） */
   :root { --h: min(1vh, .625vw); --band: calc((100vh - 100 * var(--h)) / 2); }
   html {
     margin: 0; height: 100%; background: var(--paper);
@@ -223,14 +223,6 @@
   .slot.done { background: var(--blue); border: calc(.25 * var(--h)) solid var(--blue); color: #fff; font-weight: 900; }
   .slot .guess { font-family: var(--font-num); font-size: min(calc(6.4 * var(--h)), 3.6vw); line-height: 1; color: var(--ink); padding-top: calc(.6 * var(--h)); }
   .slot .guess small { font-size: calc(3.2 * var(--h)); }
-  .slot .dmg {
-    --tape-bg: var(--red); font-family: var(--font-num); font-weight: 400; font-size: calc(4.4 * var(--h)); line-height: 1;
-    color: #fff; padding: calc(.7 * var(--h)) .7vw calc(.2 * var(--h)); transform: rotate(-4deg);
-  }
-  .slot .dmg.zero {
-    --tape-bg: var(--yellow); font-family: var(--font-body); font-weight: 900; color: var(--ink);
-    font-size: min(calc(2.6 * var(--h)), 1.47vw); padding: calc(.6 * var(--h)) .7vw; white-space: nowrap;
-  }
   .slot .note { font-size: calc(2.4 * var(--h)); font-weight: 900; color: var(--ink); white-space: nowrap; }
   .slot .note b { font-family: var(--font-num); font-weight: 400; color: var(--red); font-size: calc(3.8 * var(--h)); vertical-align: calc(-.3 * var(--h)); }
   .slot.flip { animation: flip .5s ease-out backwards; }
@@ -238,66 +230,66 @@
     --tape-bg: var(--ink); flex: none; color: #fff; font-size: calc(1.9 * var(--h)); padding: calc(.2 * var(--h)) .6vw; transform: rotate(-4deg);
   }
 
-  /* ---- 正解発表の後半：カードの上で風船が割れる（絵と音は Scratch の素材） ---- */
-  /* 部門名の行（カードの上から約 6.1h まで）より下に置く。長い名前（「ステージイベント」）の末尾にかからないように。
-     下は横棒（約 15.9h から）の手前まで（風船の上端は高さの 52% までなので、いちばん下の風船も 6.4 + 4.2 + 5.2 ≒ 15.8h で止まる） */
-  .pops { position: absolute; right: .6vw; top: calc(6.4 * var(--h)); width: 8.4vw; height: calc(8 * var(--h)); pointer-events: none; }
-  .pop { position: absolute; width: calc(3.4 * var(--h)); height: calc(5.2 * var(--h)); animation: pop-in .35s cubic-bezier(.2,1.6,.4,1) backwards; }
-  /* 絵は糸の長い1つの風船（44×327）。頭と糸の上だけを見せ、色は回して変える */
-  .pop i { display: block; width: 100%; height: 100%; overflow: hidden; }
-  .pop img { display: block; width: calc(3.4 * var(--h)); height: auto; }
-  .pop.gone i { animation: burst .28s ease-out forwards; }
-  .pop.gone::after {
-    content: "✸"; position: absolute; left: 50%; top: calc(.6 * var(--h)); margin-left: calc(-2.4 * var(--h)); width: calc(4.8 * var(--h)); text-align: center;
-    font-size: calc(4.8 * var(--h)); line-height: 1; color: var(--yellow); -webkit-text-stroke: calc(.25 * var(--h)) var(--red);
-    animation: spark .28s ease-out forwards;
+  /* ---- 正解発表の後半：各カードのバルーン数が「−12」の札と一緒に数え下がる ---- */
+  /* 減る数の札は、数字の右（脱落の札・順位と同じ欄）に貼る。数え下げの前に貼りつく */
+  .side .dmg {
+    --tape-bg: var(--red); font-family: var(--font-num); font-weight: 400; font-size: min(calc(5 * var(--h)), 2.8vw); line-height: 1;
+    color: #fff; padding: calc(.8 * var(--h)) .55vw calc(.2 * var(--h)); transform: rotate(-4deg);
+    animation: stamp .35s cubic-bezier(.3,1.5,.5,1) backwards;
   }
-  .dove {
-    position: fixed; z-index: 30; top: calc(var(--band) + 52 * var(--h)); left: 100vw; width: calc(16 * var(--h)); pointer-events: none;
-    animation: fly 2.6s linear forwards;
+  .side .dmg.zero {
+    --tape-bg: var(--yellow); font-family: var(--font-body); font-weight: 900; color: var(--ink);
+    font-size: min(calc(2.6 * var(--h)), 1.47vw); padding: calc(.6 * var(--h)) .7vw; white-space: nowrap;
   }
-  @keyframes pop-in { from { transform: scale(0); } }
-  @keyframes burst { to { transform: scale(1.6); opacity: 0; } }
-  @keyframes spark { from { transform: scale(.4); } to { transform: scale(1.3); opacity: 0; } }
-  @keyframes fly {
-    0% { transform: translate(0, 0); }
-    25% { transform: translate(-30vw, calc(-14 * var(--h))); }
-    50% { transform: translate(-60vw, calc(4 * var(--h))); }
-    75% { transform: translate(-90vw, calc(-12 * var(--h))); }
-    100% { transform: translate(-125vw, 0); }
+  /* 数え下げのあいだ、数字は1つ減るたびに小さく弾む */
+  .count .n { display: inline-block; }
+  .count .n.bump { animation: bump .16s ease-out; }
+  /* 横棒は、減る分を黄色の斜線で残し、数え下げに合わせて縮める */
+  .meter { position: relative; }
+  .meter b {
+    position: absolute; top: 0; bottom: 0; display: block;
+    background: repeating-linear-gradient(135deg, var(--yellow) 0 calc(.6 * var(--h)), var(--ink) calc(.6 * var(--h)) calc(.9 * var(--h)));
   }
+  .badge.new { animation: stamp .35s cubic-bezier(.3,1.5,.5,1) backwards; }
+  @keyframes stamp { from { transform: scale(2.2) rotate(-12deg); opacity: 0; } to { opacity: 1; } }
+  @keyframes bump { 50% { transform: translateY(calc(.5 * var(--h))) scale(1.06); } }
 
   /* ---- 正解発表の前半：Scratch のステージ画面を重ねる（予想は隠し、正解だけを出す） ---- */
+  /* ステージは 4:3 のまま、画面に収まるいちばん大きな大きさで出す（16:9 では左右、4:3 では上下にだけ少し余白）。
+     消すときはゆっくり薄くして、下の大画面（上に「正解 ◯◯%」を出したカード）に移る */
   .stage-wrap {
     position: fixed; inset: 0; z-index: 40; background: var(--paper);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(1.8 * var(--h));
-    opacity: 0; visibility: hidden; transition: opacity .5s, visibility 0s .5s;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; visibility: hidden; transition: opacity 1.2s ease-in-out, visibility 0s 1.2s;
   }
   .stage-wrap.on { opacity: 1; visibility: visible; transition: opacity .5s; }
-  .stage-head { display: flex; align-items: center; gap: 1.6vw; }
-  .stage-head .round { font-size: calc(3.4 * var(--h)); }
-  .stage-head .ttl { color: #fff; font-size: calc(4.2 * var(--h)); padding: calc(.5 * var(--h)) 2vw; transform: rotate(-1.4deg); }
   .stage-box {
-    position: relative; height: calc(84 * var(--h)); width: calc(112 * var(--h)); /* Scratch のステージは 4:3 */
-    border: calc(.4 * var(--h)) solid var(--ink); box-shadow: calc(1.2 * var(--h)) calc(1.2 * var(--h)) 0 var(--ink); background: #000;
+    --sw: min(100vw - 4vmin, (100vh - 4vmin) * 4 / 3);
+    position: relative; width: var(--sw);  /* 中の札と問題文の寸法も --sw（ステージの幅）の倍数で書く（container query は古い Safari で効かないので使わない） */
+    height: calc(var(--sw) * .75);
+    border: .4vmin solid var(--ink); box-shadow: .9vmin .9vmin 0 var(--ink); background: #000;
   }
   .stage-box iframe { display: block; width: 100%; height: 100%; border: 0; }
+  /* 「第N問 正解発表」の札は、ステージの左上（隠した高専祭の札のところ）に重ねる */
+  .stage-head { position: absolute; left: 2%; top: 2.4%; display: flex; align-items: center; gap: calc(var(--sw) * 0.014); }
+  .stage-head .round { font-size: calc(var(--sw) * 0.03); padding: calc(var(--sw) * 0.0045) calc(var(--sw) * 0.02); }
+  .stage-head .ttl { color: #fff; font-size: calc(var(--sw) * 0.0345); padding: calc(var(--sw) * 0.0045) calc(var(--sw) * 0.022); transform: rotate(-1.4deg); }
   /* 隠した問題枠のところに、部門対抗の問題文を置く */
   .stage-q {
     position: absolute; left: 6%; right: 6%; top: 14%;
-    background: #fff; border: calc(.3 * var(--h)) solid var(--ink); box-shadow: calc(.7 * var(--h)) calc(.7 * var(--h)) 0 var(--ink);
-    font-size: calc(3.3 * var(--h)); font-weight: 900; line-height: 1.35; text-align: center; text-wrap: balance; word-break: auto-phrase;
-    padding: calc(1.4 * var(--h)) 1.6vw; transform: rotate(-.6deg);
+    background: #fff; border: calc(var(--sw) * 0.0026) solid var(--ink); box-shadow: calc(var(--sw) * 0.006) calc(var(--sw) * 0.006) 0 var(--ink);
+    font-size: calc(var(--sw) * 0.03); font-weight: 900; line-height: 1.35; text-align: center; text-wrap: balance; word-break: auto-phrase;
+    padding: calc(var(--sw) * 0.012) calc(var(--sw) * 0.024); transform: rotate(-.6deg);
   }
   .stage-q::before {
-    content: ""; position: absolute; top: calc(-1.4 * var(--h)); left: 3vw; width: calc(12 * var(--h)); height: calc(2.8 * var(--h));
+    content: ""; position: absolute; top: calc(var(--sw) * -0.0127); left: calc(var(--sw) * 0.04); width: calc(var(--sw) * 0.105); height: calc(var(--sw) * 0.0255);
     background: var(--yellow); transform: rotate(-4deg); filter: url(#tape-edge);
   }
   /* 予想の欄（ゲージの左上。消せない絵の一部）に重ねる札 */
   .stage-label {
     position: absolute; left: .8%; top: 68.6%; width: 32.6%; height: 16.8%;
     display: flex; align-items: center; justify-content: center;
-    --tape-bg: var(--red); color: #fff; font-size: calc(4.8 * var(--h)); transform: rotate(-2deg);
+    --tape-bg: var(--red); color: #fff; font-size: calc(var(--sw) * 0.0435); transform: rotate(-2deg);
   }
 
   /* 音の案内は、カードのない上の帯（上の青い★（44vw）の右、右上の「第N問」の札の左）に貼る。
@@ -307,9 +299,8 @@
     font-family: var(--font-body); font-size: calc(1.8 * var(--h)); font-weight: 900; color: var(--ink); white-space: nowrap;
     --tape-bg: var(--yellow); padding: calc(.5 * var(--h)) 1vw; transform: rotate(1.2deg);
   }
-  /* 正解発表の前半（Scratch の画面を重ねている間）は上の中央に「第1問」「正解発表」の札が来るので、左上へ移す。
-     ステージ枠は札の下（band + 約 12h から）なので、16:9・16:10・4:3 のどれでも枠にも札にも重ならない */
-  .stage-wrap.on ~ .sound { left: 1.2vw; }
+  /* 正解発表の前半（Scratch の画面を重ねている間）は、ステージに重ならない右下の隅へ移す */
+  .stage-wrap.on ~ .sound { left: auto; top: auto; right: .6vw; bottom: .6vh; }
 
   .conn {
     position: fixed; right: 1vw; bottom: calc(.8 * var(--h)); z-index: 2; font-size: calc(1.6 * var(--h)); font-weight: 700; color: #777; opacity: .7;
@@ -347,7 +338,7 @@
 <div class="deco star s3" aria-hidden="true">★</div>
 <section class="top">
   <div class="bar">
-    <div class="brand tape"><b>スズリーグ</b> 部門対抗<span id="tag" class="tag tape" hidden>リハーサル</span></div>
+    <div class="brand tape">部門対抗 <b>スズリーグ</b><span id="tag" class="tag tape" hidden>リハーサル</span></div>
     <div id="round" class="round tape" hidden></div>
   </div>
   <div id="main" class="main-line"></div>
@@ -357,9 +348,9 @@
 <div id="conn" class="conn">接続中…</div>
 <!-- 正解発表の前半に重ねる Scratch のステージ画面（書き出した /stage/view/。ないときは出さない） -->
 <div id="stage-wrap" class="stage-wrap" aria-hidden="true">
-  <div class="stage-head"><span id="stage-round" class="round tape"></span><span class="ttl tape">正解発表</span></div>
   <div class="stage-box">
     <iframe id="stage-frame" title="Scratch のステージ画面" allow="autoplay" tabindex="-1"></iframe>
+    <div class="stage-head"><span id="stage-round" class="round tape"></span><span class="ttl tape">正解発表</span></div>
     <div id="stage-q" class="stage-q"></div>
     <div id="stage-label" class="stage-label tape">正解は…</div>
   </div>
@@ -372,23 +363,21 @@
 
   var POLL_MS = 1000;
   var STALE_SEC = 8;
-  // 正解発表は2段に分ける（battle_host.BATTLE_REVEAL_HOLD はこの合計より少し長く）。
-  //   前半: Scratch のステージ画面を重ね、ゲージが伸びて正解が出るまで（約14秒）を元の演出で見せる
-  //   後半: 大画面に戻り、各部門のカードで減った数だけ風船が割れる（REVEAL_COUNT_MS）
+  // 正解発表は2段に分ける（battle_host.BATTLE_REVEAL_HOLD＝23秒の中に収める）。
+  //   前半: Scratch のステージ画面を重ね、ゲージが伸びて正解が出るまで（約14秒）を元の演出で見せる。
+  //         正解が出て少ししたら、下の大画面に「正解 ◯◯%」を出してから、Scratch の画面をゆっくり薄くする
+  //   後半: 各カードに「−12」の札が貼られ、バルーン数が数え下がる（REVEAL_COUNT_MS）
+  //   ふだんは 正解約14秒 + 1.8 + 1.2 + 0.6 + 3 ≒ 20.6秒。正解が出たと分からないときも 16.5 + 1.2 + 0.6 + 3 ≒ 21.3秒で終わる（読み込みの遅れ最大1秒を足しても23秒に収まる）
   var REVEAL_COUNT_MS = 3000;     // 後半: バルーンを数え下げる長さ
-  var STAGE_AFTER_CORRECT_MS = 2500;  // 前半: Scratch が正解を出してから大画面に戻るまで
-  var STAGE_TIMEOUT_MS = 18500;   // 前半: 正解が出たと分からなくても、正解発表に入ってからここで大画面に戻る（ふだんは約14秒で出る）
+  var CHIP_LEAD_MS = 600;         // 後半: 「−12」の札を貼ってから数え下げを始めるまで
+  var STAGE_AFTER_CORRECT_MS = 1800;  // 前半: Scratch が正解を出してから、薄くし始めるまで
+  var STAGE_TIMEOUT_MS = 16500;   // 前半: 正解が出たと分からなくても、正解発表に入ってからここで薄くし始める（ふだんは約14秒で出る）
   var PREPARE_WAIT_MS = 3000;     // 前半: Scratch が回答受付を組み立て終えるのを待つ上限（間に合わなければ後半だけ）
-  var STAGE_FADE_MS = 500;        // 重ねた画面を消すのにかける時間（CSS の .stage-wrap と合わせる）
-  var HUES = [0, 210, 130, 280, 30, 180, 320, 245];  // 赤い風船の絵を回して作る色（茶色っぽくなる角度は避ける）
-  var MAX_POPS = 10;              // 1枚のカードで割る風船の絵の数（減った数がこれより多くても、絵はこれだけ）
+  var STAGE_FADE_MS = 1200;       // 重ねた画面を薄くして消すのにかける時間（CSS の .stage-wrap と合わせる）
   // Scratch の素材（書き出したステージ画面の assets/ にある。ファイル名は中身のハッシュなので変わらない）
   var ASSET = "stage/view/assets/";
-  var BALLOON_IMG = ASSET + "d556f49616f33dd8b21f0ede627d1493.svg";  // スプライト UI のコスチューム「風船」
-  var DOVE_IMGS = [ASSET + "3c62c81bffad092bd6fd2eb1ec11a12a.svg", ASSET + "eaf17b51529da2a056f1ff467136b446.svg"];  // 割る奴_Dove-a/b
-  var POP_SOUND = ASSET + "ade40cb278092c829377131e84f0619e.wav";   // UI の「ビープ」（元は風船を数え下げるたびに音程を上げて鳴らす）
-  var DOVE_SOUND = ASSET + "87df3f473dcfa74e76a579b9c18d3070.wav";  // UI_結果演出 の「割る奴_owl」
-  var POP_GAP_MS = 70;            // 割れる音を続けて鳴らす最短の間隔（10部門が一度に割れても音が団子にならないよう）
+  var COUNT_SOUND = ASSET + "ade40cb278092c829377131e84f0619e.wav";  // UI の「ビープ」（元の Scratch も、風船を数え下げるたびに音程を上げて鳴らす）
+  var COUNT_GAP_MS = 70;          // 数え下げの音を続けて鳴らす最短の間隔（10部門が一度に減っても音が団子にならないよう）
   // 回答ページ（https://suzuleague-cloud.onrender.com/furikaeri.html）の QR。docs/qr/furikaeri.svg から写した。
   // URL を変えたら docs/development.md の「QRコード」の手順で作り直し、ここも差し替える
   var QR_VIEWBOX = "0 0 41 41";
@@ -397,7 +386,9 @@
 
   var el = function (id) { return document.getElementById(id); };
   var lastKey = null;      // 状態と問題番号。変わったときだけ組み立て直す
-  var countStart = null;   // 正解発表の数え下げ（後半）を始めた時刻
+  var countStart = null;   // 正解発表の数え下げ（後半）を始める時刻（札を貼るまでは null）
+  var chipsShown = false;  // 正解発表の後半で「−12」の札を貼ったか
+  var chipTimer = null;
   var stagePhase = false;  // 正解発表の前半（Scratch の画面を重ねている）
   var current = null;
 
@@ -443,7 +434,7 @@
       main = '<div class="rules">' +
         "全部門が同じ問題に同時に答えます（全" + s.rounds + "問）<br>" +
         "外れた差の分だけ <b>バルーンが割れる</b>。持ち点は <b>100</b><br>" +
-        "最後に <b>残りバルーンが一番多い部門</b> が優勝！</div>" +
+        "最後に <b>残りバルーンが一番多い部門</b> が優勝</div>" +
         '<div class="qr"><span class="code tape"><svg viewBox="' + QR_VIEWBOX + '" aria-label="回答ページのQRコード"><path fill="#000" d="' + QR_PATH + '"/></svg></span>' +
         "<div><b class=\"tape\">入力係のスマホで読み取る</b><br>回答ページで、自分の部門の<br>ボタンを押してください" +
         // 参加数は下の欄でなく QR の横に出す（10部門を2段に並べると、下の欄がカードの裏に隠れる）
@@ -458,24 +449,26 @@
     } else if (s.state === STATE.OPEN || (s.state === STATE.REVEAL && stagePhase)) {
       // 正解発表の前半（Scratch の画面を重ねる前の待ちとフェードのあいだ）も、正解はまだ出さない
       main = '<div class="question">' + q + "</div>";
-      status = "<b>予想オープン！</b>　正解は…？";
+      status = "予想オープン";
     } else if (s.state === STATE.REVEAL) {
       main = '<div class="question small">' + q + '</div><div class="correct"><span class="tape">正解</span><b class="tape">' +
         s.correct + "<small>%</small></b></div>";
     } else if (s.state === STATE.ROUND_RESULT) {
       main = '<div class="headline tape">第' + s.round + "問 終了　途中順位</div>";
-      status = s.round < s.rounds ? "あと " + (s.rounds - s.round) + " 問" : "次は最終結果！";
+      status = s.round < s.rounds ? "あと " + (s.rounds - s.round) + " 問" : "次は最終結果";
     } else if (s.state === STATE.FINISHED) {
-      // 同率優勝で名前が長くなっても1行に収める（折り返すと下の文字がカードの裏に隠れる）。
-      // 4部門以上が並んだら名前は出さず、黄色い1位のカードで見せる
-      var names = s.winners.length > 3 ? s.winners.length + "部門が同率"
-        : s.winners.map(function (w) { return w.name; }).join("・");
-      var chars = 4 + names.length;  // 「優勝　」と「！」の分を足す（エスケープする前の文字数で数える）
+      // 優勝した部門の名前を並べるだけにする。名前が長くなっても1行に収める（折り返すと下の文字がカードの裏に隠れる）。
+      // 札に入りきらないほど多いときは、札は「優勝」だけにして、名前は下の行に並べる
+      var names = s.winners.map(function (w) { return w.name; }).join("・");
+      var chars = 3 + names.length;  // 「優勝　」の分を足す（エスケープする前の文字数で数える）
+      var inline = chars <= 20;
       main = s.winners.length
         ? '<div class="win-wrap"><span class="star l">★</span><div class="headline tape win" style="font-size:min(calc(8.6 * var(--h)),' +
-          (64 / chars).toFixed(2) + 'vw)">優勝　' + esc(names) + '！</div><span class="star r">★</span></div>'
+          (64 / (inline ? chars : 2)).toFixed(2) + 'vw)">優勝' + (inline ? "　" + esc(names) : "") + '</div><span class="star r">★</span></div>'
         : '<div class="headline tape">最終結果</div>';
-      status = "おつかれさまでした";
+      if (s.winners.length && !inline) {
+        status = '<span style="font-size:min(calc(3.2 * var(--h)),' + (90 / names.length).toFixed(2) + 'vw)">' + esc(names) + "</span>";
+      }
     }
     el("main").innerHTML = main;
     el("status").innerHTML = status;
@@ -500,7 +493,6 @@
       return '<div class="slot">' + (t.eliminated ? "（脱落）" : "考え中…") + "</div>";
     }
     var opened = s.state === STATE.OPEN || s.state === STATE.REVEAL;
-    var damageShown = s.state === STATE.REVEAL && !stagePhase;  // 前半のあいだは減る数も出さない
     if (isRanked(s) && t.damage != null) {
       return '<div class="slot"><span class="note">第' + s.round + "問 " +
         (t.damage > 0 ? "<b>−" + t.damage + "</b>" : (t.error === 0 ? "ぴったり" : "±0")) + "</span></div>";
@@ -509,20 +501,22 @@
     var guess = t.answer == null
       ? '<span class="guess">―</span>'
       : '<span class="guess">' + t.answer + "<small>%</small></span>";
-    var dmg = "";
-    if (damageShown && t.damage != null) {
-      if (t.damage > 0) dmg = '<span class="dmg tape">−' + t.damage + "</span>";
-      else if (t.error === 0) dmg = '<span class="dmg tape zero">ぴったり!</span>';
-      else dmg = '<span class="dmg tape zero">±0</span>';  // 脱落済みで減らない
-    }
-    return '<div class="slot flip">' + guess + dmg + "</div>";
+    // 予想は予想オープンでめくる。正解発表のあいだは描き直してもめくり直さない
+    return '<div class="slot' + (s.state === STATE.OPEN ? " flip" : "") + '">' + guess + "</div>";
+  }
+
+  // 正解発表の後半に、数字の右に貼る減る数の札（前半のあいだは出さない）
+  function chip(s, t) {
+    if (s.state !== STATE.REVEAL || !chipsShown || t.damage == null) return "";
+    if (t.damage > 0) return '<div class="dmg tape">−' + t.damage + "</div>";
+    return '<div class="dmg tape zero">' + (t.error === 0 ? "ぴったり" : "±0") + "</div>";  // ±0 は脱落済みで減らない
   }
 
   function card(s, t) {
     var cls = ["card"];
     if (s.state === STATE.ANSWERING && t.answered) cls.push("answered");
     // この問題で脱落する部門は、正解発表の数え下げが0に届いたときに灰色にする（tick）。前の問題までに脱落した部門は最初から灰色
-    var outNow = t.eliminated && (s.state !== STATE.REVEAL || !(t.damage > 0));
+    var outNow = t.eliminated && (s.state !== STATE.REVEAL || !(t.damage > 0) || (countStart !== null && countProgress() >= 1));
     if (outNow) cls.push("out");
     var ranked = isRanked(s);
     if (ranked && t.rank === 1) cls.push("top1");
@@ -532,36 +526,28 @@
       // 脱落の札と順位は数字の右に出す（部門名の横に置くと「ステージイベント」が切れる。
       // 下の欄に重ねると文字が隠れる。正解発表では数え下げが0に届いてから灰色にする）
       '<div class="count-row"><div class="count"><span class="n">' + start + "</span><small>個</small></div>" +
-      '<div class="side">' + (outNow ? '<div class="badge tape">脱落</div>' : "") +
+      '<div class="side">' + chip(s, t) + (outNow ? '<div class="badge tape">脱落</div>' : "") +
       (ranked ? '<div class="rank">' + t.rank + "位</div>" : "") + "</div></div>" +
-      '<div class="meter"><i style="width:' + start + '%"></i></div>' +
-      slot(s, t) + pops(s, t) +
+      '<div class="meter">' + meter(s, t, start) + "</div>" +
+      slot(s, t) +
       "</div>";
   }
 
-  // 後半の始めに、減る数の分（絵は MAX_POPS まで）の風船をカードに浮かべる。tick が数え下げに合わせて割る
-  function pops(s, t) {
-    if (s.state !== STATE.REVEAL || countStart === null || !(t.damage > 0)) return "";
-    var n = Math.min(t.damage, MAX_POPS), html = "";
-    for (var i = 0; i < n; i++) {
-      // 置き場所と色はカードと順番から決める（描き直しても同じ並びになる）
-      var x = ((i * 37 + t.number * 13) % 86), y = ((i * 53 + t.number * 29) % 52);
-      var hue = HUES[(i * 3 + t.number) % HUES.length];
-      html += '<span class="pop" data-at="' + ((i + 1) / n).toFixed(3) + '" style="left:' + x + "%;top:" + y +
-        "%;animation-delay:" + (i * 40) + 'ms"><i><img src="' + BALLOON_IMG + '" alt="" style="filter:hue-rotate(' + hue + 'deg) saturate(1.3)"></i></span>';
-    }
-    return '<div class="pops" aria-hidden="true">' + html + "</div>";
+  // 横棒。札を貼ったあとは、残る分を赤、減る分を黄色の斜線にして、斜線を数え下げに合わせて縮める
+  function meter(s, t, shown) {
+    if (s.state !== STATE.REVEAL || !chipsShown || !(t.damage > 0)) return '<i style="width:' + shown + '%"></i>';
+    return '<i style="width:' + t.balloons + '%"></i><b style="left:' + t.balloons + "%;width:" + (shown - t.balloons) + '%"></b>';
   }
 
   function countProgress() {
-    var p = Math.min(1, (performance.now() - countStart) / REVEAL_COUNT_MS);
+    var p = Math.min(1, Math.max(0, (performance.now() - countStart) / REVEAL_COUNT_MS));
     return 1 - Math.pow(1 - p, 3);
   }
 
-  // 正解発表のあいだは、発表前の数から今の数へ数え下げる（前半のあいだは発表前の数のまま）
+  // 正解発表のあいだは、発表前の数から今の数へ数え下げる（数え下げを始めるまでは発表前の数のまま）
   function displayedBalloons(s, t) {
     if (s.state !== STATE.REVEAL || !t.damage) return t.balloons;
-    if (countStart === null) return stagePhase ? t.balloons + t.damage : t.balloons;
+    if (countStart === null) return t.balloons + t.damage;
     return Math.round(t.balloons + t.damage * (1 - countProgress()));
   }
 
@@ -575,22 +561,30 @@
     }).join("");
   }
 
-  // 数字と横棒だけを書き換える（カードを作り直すとめくりの動きがやり直しになる）
+  // 数字と横棒だけを書き換える（カードを作り直すと札の動きがやり直しになる）
   function tick() {
     var s = current;
     if (s && s.state === STATE.REVEAL && countStart !== null) {
+      var changed = false;
       s.teams.forEach(function (t) {
         var node = document.querySelector('.card[data-team="' + t.number + '"]');
-        if (!node) return;
-        var n = displayedBalloons(s, t);
-        node.querySelector(".n").textContent = n;
-        node.querySelector(".meter i").style.width = n + "%";
-        if (t.eliminated && n === 0) node.classList.add("out");
+        if (!node || !(t.damage > 0)) return;
+        var n = displayedBalloons(s, t), num = node.querySelector(".n");
+        if (num.textContent === String(n)) return;
+        num.textContent = n;
+        num.classList.remove("bump");
+        void num.offsetWidth;  // 弾む動きを始めからやり直す
+        num.classList.add("bump");
+        var lost = node.querySelector(".meter b");
+        if (lost) lost.style.width = (n - t.balloons) + "%";
+        changed = true;
+        // この問題で脱落する部門は、0 に届いたところで灰色にして「脱落」の札を貼る
+        if (t.eliminated && n === 0 && !node.classList.contains("out")) {
+          node.classList.add("out");
+          node.querySelector(".side").insertAdjacentHTML("beforeend", '<div class="badge tape new">脱落</div>');
+        }
       });
-      var eased = countProgress();
-      document.querySelectorAll(".pop:not(.gone)").forEach(function (p) {
-        if (eased + 1e-6 >= Number(p.dataset.at)) { p.classList.add("gone"); sound.pop(eased); }
-      });
+      if (changed) sound.count(countProgress());
     }
     stage.watch();
     requestAnimationFrame(tick);
@@ -599,7 +593,7 @@
   // ---- 音（Scratch の効果音。ブラウザの決まりで、画面を1回クリックするまで鳴らせない） ------------
 
   var sound = (function () {
-    var ctx = null, buffers = {}, lastPop = 0;
+    var ctx = null, buffers = {}, lastCount = 0;
     function load(url) {
       fetch(url).then(function (r) { if (!r.ok) throw new Error(); return r.arrayBuffer(); })
         .then(function (data) { return ctx.decodeAudioData(data); })
@@ -616,7 +610,7 @@
     }
     function unlock() {
       var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!ctx && Ctx) { ctx = new Ctx(); load(POP_SOUND); load(DOVE_SOUND); }
+      if (!ctx && Ctx) { ctx = new Ctx(); load(COUNT_SOUND); }
       if (ctx && ctx.state === "suspended") ctx.resume();
       stage.unlock();
       el("sound").hidden = true;
@@ -625,28 +619,14 @@
     document.addEventListener("pointerdown", unlock);
     return {
       // 進み具合（0〜1）に合わせて音程を上げる（元の Scratch と同じ鳴らし方）
-      pop: function (progress) {
+      count: function (progress) {
         var now = performance.now();
-        if (now - lastPop < POP_GAP_MS) return;
-        lastPop = now;
-        play(POP_SOUND, 1 + progress * 1.2);
+        if (now - lastCount < COUNT_GAP_MS) return;
+        lastCount = now;
+        play(COUNT_SOUND, 1 + progress * 1.2);
       },
-      dove: function () { play(DOVE_SOUND); },
     };
   })();
-
-  // 後半の始めに、Scratch の「割る奴」（鳩）を画面の右から左へ飛ばす
-  function flyDove() {
-    var img = document.createElement("img");
-    img.className = "dove"; img.src = DOVE_IMGS[0]; img.alt = "";
-    var flap = 0, timer = setInterval(function () { flap = 1 - flap; img.src = DOVE_IMGS[flap]; }, 200);
-    function done() { clearInterval(timer); img.remove(); }
-    img.addEventListener("animationend", done);
-    img.addEventListener("error", done);
-    setTimeout(done, 4000);  // 動きを減らす設定で animationend が来ないとき
-    document.body.appendChild(img);
-    sound.dove();
-  }
 
   // ---- Scratch のステージ画面（正解発表の前半） -------------------------------
   // 書き出した /stage/view/ を iframe で開き、同じオリジンなので中の Scratch（vm）の変数を直接書いて動かす。
@@ -658,7 +638,7 @@
   var stage = (function () {
     var frame = el("stage-frame"), wrap = el("stage-wrap");
     var vm = null, seq = 0, preparedQid = null, preparedAt = 0, playing = null, unlocked = false;
-    var fadeTimer = null, muteTimer = null;
+    var muteTimer = null;
 
     function vars() { return vm.runtime.getTargetForStage().variables; }
     function find(target, name) {
@@ -726,6 +706,7 @@
         get("途中復帰") === "0" && get("☁ P2S_SEQ") === seen("見たSEQ");
     }
     function begin(s) {
+      preparedQid = null;  // 1回流したら使い切り（途中で開き直したように見えても、同じ問題で Scratch を待ち直さない）
       set({ "予想%消して": 1, "エキシビション": 1, "☁ P2S_CORRECT": s.correct, "☁ P2S_STATE": 4 });
       el("stage-round").textContent = "第" + s.round + "問";
       el("stage-q").textContent = s.question.text;
@@ -760,11 +741,10 @@
       ready: function (s) { return !!vm && !!s.question && preparedQid === s.question.id; },
       // 組み立てが終わっていなければ少し待ってから始める（PREPARE_WAIT_MS で間に合わなければ後半へ）
       play: function (s, done) {
-        clearTimeout(fadeTimer);
         playing = { s: s, asked: performance.now(), start: null, shown: null, done: done };
         if (built(s.question.id)) begin(s);
       },
-      // tick から毎コマ呼ぶ。正解が出たら（回答中 が 3 になる）少し見せてから大画面に戻る
+      // tick から毎コマ呼ぶ。正解が出たら（回答中 が 3 になる）少し見せてから、ゆっくり薄くして大画面に戻る
       watch: function () {
         if (!playing) return;
         var now = performance.now(), finish = false;
@@ -780,15 +760,14 @@
             now - playing.asked >= STAGE_TIMEOUT_MS;
         }
         if (finish) {
+          // 下の大画面を先に「正解 ◯◯%」の画面にしてから薄くする（薄くなるにつれて、正解の札が残って見える）
           var done = playing.done, shownStage = playing.start !== null;
           this.stop();
-          if (shownStage) fadeTimer = setTimeout(done, STAGE_FADE_MS);
-          else done();
+          done(shownStage ? STAGE_FADE_MS : 0);
         }
       },
       stop: function () {
         playing = null;
-        clearTimeout(fadeTimer);
         wrap.classList.remove("on");
         clearTimeout(muteTimer);
         muteTimer = setTimeout(function () { volume(false); }, STAGE_FADE_MS);
@@ -796,15 +775,20 @@
     };
   })();
 
-  // 正解発表の後半：カードを描き直して（予想のめくりと風船を出す）数え下げを始める
-  function startCount() {
+  // 正解発表の後半：上に正解を出し、重ねた画面が消えるのを待って（wait ミリ秒）札を貼り、数え下げを始める
+  function startCount(wait) {
     var s = current;
     stagePhase = false;
     if (!s || s.state !== STATE.REVEAL) return;
-    countStart = performance.now();
     renderTop(s);
     renderGrid(s);
-    if (s.teams.some(function (t) { return t.damage > 0; })) flyDove();
+    clearTimeout(chipTimer);
+    chipTimer = setTimeout(function () {
+      if (!current || current.state !== STATE.REVEAL || current.round !== s.round) return;
+      chipsShown = true;
+      countStart = performance.now() + CHIP_LEAD_MS;
+      renderGrid(current);
+    }, wait || 0);
   }
 
   function render(s) {
@@ -826,14 +810,14 @@
     lastKey = key;
     if (s.state === STATE.ANSWERING || s.state === STATE.OPEN) stage.prepare(s);
     if (fresh) {
-      countStart = null;
+      countStart = null; chipsShown = false; clearTimeout(chipTimer);
       if (stagePhase) { stagePhase = false; stage.stop(); }  // 前半の途中で進んだ（開き直し・送り直し）
       if (s.state === STATE.REVEAL) {
         if (stage.ready(s)) {
           stagePhase = true;  // 大画面は発表前の数のまま、上に Scratch の画面を重ねる。終わったら startCount
           stage.play(s, startCount);
         } else {
-          startCount();  // Scratch の画面がない・間に合わないときは、すぐ後半へ
+          startCount(0);  // Scratch の画面がない・間に合わないときは、すぐ後半へ
           render.sig = sig;
           return;
         }

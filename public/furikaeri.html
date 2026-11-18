@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#f8f8f8">
-<title>スズリーグ 部門の回答ページ</title>
+<title>部門対抗 スズリーグ 回答ページ</title>
 <!--
   部門対抗モード（振り返り会 2026-12-03）の回答ページ。各部門の入力係が自分のスマホで開き、
   部門の4桁の合言葉を入れて%を回答する。合言葉で部門が決まる。
@@ -156,7 +156,7 @@
 </svg>
 <div class="deco-clip" aria-hidden="true"><div class="deco"></div><div class="deco-star">★</div></div>
 <header>
-  <h1 class="tape"><b>スズリーグ</b> 部門対抗</h1>
+  <h1 class="tape">部門対抗 <b>スズリーグ</b></h1>
   <span id="conn" class="pill"><span class="dot"></span><span id="conn-text">接続中…</span></span>
 </header>
 
@@ -351,7 +351,7 @@
     if (needTeam) { drawPick(s); return; }
     var mine = s && s.teams ? s.teams.filter(function (t) { return t.number === teamNo; })[0] : null;
     el("team-name").textContent = mine ? mine.name : "部門" + teamNo;
-    // 正解発表のあいだは、大画面の演出（Scratch のゲージ→風船が割れる。約20秒）より先に答えが分からないよう、
+    // 正解発表のあいだは、大画面の演出（Scratch のゲージ→バルーン数の数え下げ。約21秒）より先に答えが分からないよう、
     // 減る前の数のままにする（減った数と正解は途中順位で出す）
     var hiding = !!(s && mine && s.state === STATE.REVEAL);
     el("balloons").textContent = mine ? mine.balloons + (hiding && mine.damage ? mine.damage : 0) : "-";
@@ -387,14 +387,14 @@
       if (sent && sent.qid === qid && mine.answer !== sent.value) {
         body += "（最後に送った " + sent.value + "% は締め切りに間に合いませんでした）";
       }
-      message("予想オープン！", body, q);
+      message("予想オープン", body, q);
     } else if (s.state === STATE.REVEAL) {
-      message("正解発表！", "大画面を見てください。結果は途中順位でここにも出ます。", q);
+      message("正解発表", "大画面を見てください。結果は途中順位でここにも出ます。", q);
     } else if (s.state === STATE.ROUND_RESULT || s.state === STATE.FINISHED) {
       show("msg", s.state === STATE.FINISHED);
       if (s.state === STATE.FINISHED) {
         var won = s.winners.some(function (w) { return w.number === teamNo; });
-        message(won ? "優勝おめでとうございます！" : "最終結果", "あなたの部門は " + mine.rank + " 位でした。");
+        message(won ? "優勝" : "最終結果", "あなたの部門は " + mine.rank + " 位でした。");
       }
       if (mine.error != null) {
         show("result-card", true);
