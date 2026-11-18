@@ -249,7 +249,7 @@
   // ---- 部門を選ぶ ------------------------------------------------------
 
   function pickTeam(n) {
-    teamNo = n; sent = null;
+    teamNo = n; sent = null; typed = ""; setStatus("", "");
     try { localStorage.setItem(TEAM_KEY, String(n)); } catch (e) { /* 保存できない環境 */ }
     render(current);
   }
@@ -260,7 +260,7 @@
   });
 
   el("change-team").addEventListener("click", function () {
-    teamNo = null; sent = null;
+    teamNo = null; sent = null; typed = ""; setStatus("", "");
     try { localStorage.removeItem(TEAM_KEY); } catch (e) { /* 保存できない環境 */ }
     render(current);
   });
@@ -380,6 +380,9 @@
         } else if (Date.now() - sent.at > 8000) {
           setStatus("ng", "回答が届いていないかもしれません。もう一度送るか、司会に伝えてください");
         }
+      } else if (!sent && !sending && mine.answered) {
+        // ページを開き直したときや別の端末から答えたときは、送った数字が分からないので「回答済み」とだけ出す
+        setStatus("ok", "この部門は回答済みです（締め切りまでは直せます）");
       }
       drawReadout();
     } else if (s.state === STATE.OPEN) {

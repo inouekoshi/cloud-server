@@ -239,7 +239,8 @@
   }
   .side .dmg.zero {
     --tape-bg: var(--yellow); font-family: var(--font-body); font-weight: 900; color: var(--ink);
-    font-size: min(calc(2.6 * var(--h)), 1.47vw); padding: calc(.6 * var(--h)) .7vw; white-space: nowrap;
+    /* 「100個」の横でもカードからはみ出さない大きさ（11/19 に1920×1080と4:3で確認） */
+    font-size: min(calc(2.2 * var(--h)), 1.15vw); padding: calc(.5 * var(--h)) .4vw; white-space: nowrap;
   }
   /* 数え下げのあいだ、数字は1つ減るたびに小さく弾む */
   .count .n { display: inline-block; }
@@ -499,7 +500,7 @@
     }
     if (!opened) return '<div class="slot"></div>';
     var guess = t.answer == null
-      ? '<span class="guess">―</span>'
+      ? '<span class="guess">50<small>%</small></span><span class="note">未回答</span>'
       : '<span class="guess">' + t.answer + "<small>%</small></span>";
     // 予想は予想オープンでめくる。正解発表のあいだは描き直してもめくり直さない
     return '<div class="slot' + (s.state === STATE.OPEN ? " flip" : "") + '">' + guess + "</div>";

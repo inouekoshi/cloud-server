@@ -293,7 +293,8 @@
         var mark = t.answered ? '<span class="yes">' + t.answer + "%</span>" : (t.eliminated ? '<span class="muted">脱落</span>' : '<span class="no">まだ</span>');
         return '<tr class="' + cls + '"><td class="name">' + esc(t.name) + '</td><td class="num">' + mark + '</td><td class="num">' + t.balloons + "</td></tr>";
       }
-      var extra = t.answer != null ? t.answer + "%" : "";
+      var opened = s.state === STATE.OPEN || t.damage != null;
+      var extra = t.answer != null ? t.answer + "%" : (opened ? "未回答→50%" : "");
       if (t.damage != null) extra += "（−" + t.damage + "）";
       return '<tr class="' + cls + '"><td class="num">' + (t.rank || "") + '位</td><td class="name">' + esc(t.name) +
         (t.eliminated ? "（脱落）" : "") + '</td><td class="num muted">' + extra + '</td><td class="num">' + t.balloons + "</td></tr>";
