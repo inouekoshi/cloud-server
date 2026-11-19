@@ -128,7 +128,6 @@
     display: flex; align-items: center; gap: 1.6vw; white-space: nowrap;
     animation: pop .5s cubic-bezier(.2,1.6,.4,1);
   }
-  .correct span { color: #fff; font-size: calc(4.2 * var(--h)); padding: calc(.6 * var(--h)) 1.4vw; transform: rotate(-3deg); }
   .correct b {
     --tape-bg: var(--yellow); font-family: var(--font-num); font-weight: 400;
     font-size: calc(19 * var(--h)); line-height: .95; padding: calc(1.6 * var(--h)) 2.4vw 0; transform: rotate(2deg);
@@ -255,43 +254,88 @@
   @keyframes stamp { from { transform: scale(2.2) rotate(-12deg); opacity: 0; } to { opacity: 1; } }
   @keyframes bump { 50% { transform: translateY(calc(.5 * var(--h))) scale(1.06); } }
 
-  /* ---- 正解発表の前半：Scratch のステージ画面を重ねる（予想は隠し、正解だけを出す） ---- */
-  /* ステージは 4:3 のまま、画面に収まるいちばん大きな大きさで出す（16:9 では左右、4:3 では上下にだけ少し余白）。
-     消すときはゆっくり薄くして、下の大画面（上に「正解 ◯◯%」を出したカード）に移る */
-  .stage-wrap {
-    position: fixed; inset: 0; z-index: 40; background: var(--paper);
-    display: flex; align-items: center; justify-content: center;
-    opacity: 0; visibility: hidden; transition: opacity 1.2s ease-in-out, visibility 0s 1.2s;
+  /* ---- 正解発表の前半：予想のピンとゲージ（大画面の上に重ねる。11/19 に Scratch の画面から作り直した） ---- */
+  /* 上に問題文、中ほどに各部門の予想のピン（名札と棒）、下に 0〜100 の目盛りのついたゲージを置く。
+     ゲージが伸びて正解の位置で止まり、ゲージの先についている数字の札が大きくなる。
+     動きは経過時間から毎コマ計算する（reveal.frame）。
+     消すとき（.leaving）は、四隅の飾りを残して地とほかの部品を薄くし、下のカードの画面を見せる。
+     そのあいだに、正解の札（.rv-fly）がカードの画面の上の正解の位置まで飛んでいく */
+  .rv {
+    position: fixed; inset: 0; z-index: 40; background: var(--paper); overflow: hidden;
+    opacity: 0; visibility: hidden; transition: opacity .4s, visibility 0s .4s;
   }
-  .stage-wrap.on { opacity: 1; visibility: visible; transition: opacity .5s; }
-  .stage-box {
-    --sw: min(100vw - 4vmin, (100vh - 4vmin) * 4 / 3);
-    position: relative; width: var(--sw);  /* 中の札と問題文の寸法も --sw（ステージの幅）の倍数で書く（container query は古い Safari で効かないので使わない） */
-    height: calc(var(--sw) * .75);
-    border: .4vmin solid var(--ink); box-shadow: .9vmin .9vmin 0 var(--ink); background: #000;
+  .rv.on { opacity: 1; visibility: visible; transition: opacity .4s; }
+  /* 先にピンとゲージを 0.4 秒で消し、そのあと地を薄くする（問題文が二重に見えないように）。
+     四隅の飾りは下の画面と同じ位置にあるので、一緒に消しても見た目は変わらない */
+  .rv.leaving { background-color: transparent; transition: background-color .7s ease-in-out .35s; }
+  .rv > .deco, .rv-q, .rv-pins, .rv-track, .rv-tip, .rv-ticks { transition: opacity .4s ease-in; }
+  .rv.leaving > .deco, .rv.leaving .rv-q, .rv.leaving .rv-pins, .rv.leaving .rv-track, .rv.leaving .rv-tip, .rv.leaving .rv-ticks { opacity: 0 !important; }
+  .rv.leaving .rv-ans { visibility: hidden; }
+  .rv-fly {
+    position: fixed; z-index: 41; transform-origin: 0 0; animation: none; pointer-events: none;
+    transition: transform 1s cubic-bezier(.55, 0, .2, 1);
   }
-  .stage-box iframe { display: block; width: 100%; height: 100%; border: 0; }
-  /* 「第N問 正解発表」の札は、ステージの左上（隠した高専祭の札のところ）に重ねる */
-  .stage-head { position: absolute; left: 2%; top: 2.4%; display: flex; align-items: center; gap: calc(var(--sw) * 0.014); }
-  .stage-head .round { font-size: calc(var(--sw) * 0.03); padding: calc(var(--sw) * 0.0045) calc(var(--sw) * 0.02); }
-  .stage-head .ttl { color: #fff; font-size: calc(var(--sw) * 0.0345); padding: calc(var(--sw) * 0.0045) calc(var(--sw) * 0.022); transform: rotate(-1.4deg); }
-  /* 隠した問題枠のところに、部門対抗の問題文を置く */
-  .stage-q {
-    position: absolute; left: 6%; right: 6%; top: 14%;
-    background: #fff; border: calc(var(--sw) * 0.0026) solid var(--ink); box-shadow: calc(var(--sw) * 0.006) calc(var(--sw) * 0.006) 0 var(--ink);
-    font-size: calc(var(--sw) * 0.03); font-weight: 900; line-height: 1.35; text-align: center; text-wrap: balance; word-break: auto-phrase;
-    padding: calc(var(--sw) * 0.012) calc(var(--sw) * 0.024); transform: rotate(-.6deg);
+  .rv-frame { position: absolute; left: 0; right: 0; top: var(--band); height: calc(100 * var(--h)); }
+  .rv-q {
+    position: absolute; left: 50%; top: calc(5 * var(--h)); width: max-content; max-width: 84vw; transform: translateX(-50%) rotate(-.6deg);
+    background: #fff; border: calc(.3 * var(--h)) solid var(--ink); box-shadow: calc(.8 * var(--h)) calc(.8 * var(--h)) 0 var(--ink);
+    font-size: calc(3.6 * var(--h)); font-weight: 900; line-height: 1.4; text-align: center; text-wrap: balance; word-break: auto-phrase;
+    padding: calc(1.5 * var(--h)) 2.4vw;
   }
-  .stage-q::before {
-    content: ""; position: absolute; top: calc(var(--sw) * -0.0127); left: calc(var(--sw) * 0.04); width: calc(var(--sw) * 0.105); height: calc(var(--sw) * 0.0255);
+  .rv-q::before {
+    content: ""; position: absolute; top: calc(-1.4 * var(--h)); left: 2.4vw; width: calc(12 * var(--h)); height: calc(2.8 * var(--h));
     background: var(--yellow); transform: rotate(-4deg); filter: url(#tape-edge);
   }
-  /* 予想の欄（ゲージの左上。消せない絵の一部）に重ねる札 */
-  .stage-label {
-    position: absolute; left: .8%; top: 68.6%; width: 32.6%; height: 16.8%;
-    display: flex; align-items: center; justify-content: center;
-    --tape-bg: var(--red); color: #fff; font-size: calc(var(--sw) * 0.0435); transform: rotate(-2deg);
+  /* ゲージ（白地に黒枠。伸びた分は赤の斜線） */
+  .rv-gauge { position: absolute; left: 6vw; right: 6vw; top: calc(64 * var(--h)); height: calc(10 * var(--h)); }
+  .rv-track {
+    position: absolute; inset: 0; overflow: hidden;
+    background: #fff; border: calc(.4 * var(--h)) solid var(--ink); box-shadow: calc(.8 * var(--h)) calc(.8 * var(--h)) 0 var(--ink);
   }
+  .rv-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    background: repeating-linear-gradient(135deg, var(--red) 0 calc(2 * var(--h)), #c8141b calc(2 * var(--h)) calc(4 * var(--h)));
+  }
+  .rv-grid { position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(17,17,17,.18) calc(10% - 2px) 10%); }
+  .rv-tip { position: absolute; left: 0; top: calc(-1.6 * var(--h)); bottom: calc(-1.6 * var(--h)); width: calc(.7 * var(--h)); margin-left: calc(-.35 * var(--h)); background: var(--ink); }
+  /* 目盛り（5 ごとに短い線、10 ごとに長い線と数字） */
+  .rv-ticks { position: absolute; left: 0; right: 0; top: calc(100% + .9 * var(--h)); height: calc(5 * var(--h)); }
+  .rv-ticks i { position: absolute; top: 0; width: 2px; margin-left: -1px; height: calc(1.2 * var(--h)); background: var(--ink); }
+  .rv-ticks i.maj { width: 3px; margin-left: -1.5px; height: calc(2 * var(--h)); }
+  .rv-ticks b { position: absolute; top: calc(2.1 * var(--h)); transform: translateX(-50%); font-family: var(--font-num); font-weight: 400; font-size: calc(3.4 * var(--h)); line-height: 1; transition: opacity .2s; }
+  /* 正解の数字。ゲージの先について動き、止まったら黄色の札になって大きくなる */
+  .rv-ans { position: absolute; left: 0; top: calc(100% + 1.6 * var(--h)); transform-origin: 0 0; }  /* 大きくするときの基準はゲージの先 */
+  .rv-ans::before {
+    content: ""; position: absolute; left: calc(-1.1 * var(--h)); top: calc(-1.4 * var(--h));
+    border: calc(1.1 * var(--h)) solid transparent; border-top: 0; border-bottom: calc(1.5 * var(--h)) solid var(--ink);
+  }
+  .rv-ans .v {
+    --tape-bg: var(--ink); color: #fff; font-family: var(--font-num); font-weight: 400; line-height: 1; white-space: nowrap;
+    font-size: calc(4.4 * var(--h)); padding: calc(.9 * var(--h)) .9vw calc(.2 * var(--h)); transform: translateX(-50%);
+  }
+  .rv-ans .v small { font-size: .5em; margin-left: .1em; }
+  .rv-ans.done .v { --tape-bg: var(--yellow); color: var(--ink); }
+  .rv-ans.done::before { border-bottom-color: var(--yellow); }
+  /* 予想のピン。名札は棒から左右に伸ばして段に積む（積み方は reveal.layout）。--ps は名札の縮め具合 */
+  .rv-pins { --ps: 1; position: absolute; left: 6vw; right: 6vw; bottom: calc(36 * var(--h)); }
+  .rv-pin { position: absolute; left: 0; bottom: 0; transition: opacity .4s; }
+  .rv-pin .stem { position: absolute; left: -1.5px; bottom: 0; width: 3px; background: var(--ink); transform-origin: 50% 100%; }
+  .rv-pin .dot {
+    position: absolute; left: calc(-1.1 * var(--h)); bottom: calc(-1.1 * var(--h)); width: calc(2.2 * var(--h)); height: calc(2.2 * var(--h));
+    border-radius: 50%; background: var(--c); border: calc(.35 * var(--h)) solid var(--ink);
+  }
+  .rv-pin .lab {
+    position: absolute; bottom: 0; display: flex; align-items: baseline; gap: .5vw; white-space: nowrap;
+    background: #fff; border: calc(.3 * var(--h)) solid var(--ink); box-shadow: calc(.5 * var(--h)) calc(.5 * var(--h)) 0 var(--ink);
+    padding: calc(.35 * var(--h)) .7vw calc(.25 * var(--h)); font-size: calc(3.1 * var(--h) * var(--ps)); font-weight: 900; line-height: 1.15;
+  }
+  .rv-pin .lab::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: calc(.9 * var(--h)); background: var(--c); }
+  .rv-pin .lab span { padding-left: calc(.6 * var(--h)); }
+  .rv-pin .lab b { font-family: var(--font-num); font-weight: 400; font-size: calc(4.5 * var(--h) * var(--ps)); line-height: .9; color: var(--red); }
+  .rv-pin .lab b.na { color: var(--grey); }  /* 未回答（予想50として数える） */
+  .rv-pin.out .lab { color: var(--grey); border-color: var(--grey); box-shadow: calc(.5 * var(--h)) calc(.5 * var(--h)) 0 var(--grey); }
+  .rv-pin.out .lab b { color: var(--grey); }
+  .rv-pin.near .lab { background: var(--yellow); }  /* 正解にいちばん近い部門（止まってから） */
 
   /* 音の案内は、カードのない上の帯（上の青い★（44vw）の右、右上の「第N問」の札の左）に貼る。
      左下に置くと左下のカードの下端に重なり、タイトルのすぐ右に置くとリハーサルの札に重なる */
@@ -300,8 +344,8 @@
     font-family: var(--font-body); font-size: calc(1.8 * var(--h)); font-weight: 900; color: var(--ink); white-space: nowrap;
     --tape-bg: var(--yellow); padding: calc(.5 * var(--h)) 1vw; transform: rotate(1.2deg);
   }
-  /* 正解発表の前半（Scratch の画面を重ねている間）は、ステージに重ならない右下の隅へ移す */
-  .stage-wrap.on ~ .sound { left: auto; top: auto; right: .6vw; bottom: .6vh; }
+  /* 正解発表の前半（ピンとゲージを重ねている間）は、問題文に重ならない右下の隅へ移す */
+  .rv.on ~ .sound { left: auto; top: auto; right: .6vw; bottom: .6vh; }
 
   .conn {
     position: fixed; right: 1vw; bottom: calc(.8 * var(--h)); z-index: 2; font-size: calc(1.6 * var(--h)); font-weight: 700; color: #777; opacity: .7;
@@ -347,13 +391,18 @@
 </section>
 <section id="grid" class="grid"></section>
 <div id="conn" class="conn">接続中…</div>
-<!-- 正解発表の前半に重ねる Scratch のステージ画面（書き出した /stage/view/。ないときは出さない） -->
-<div id="stage-wrap" class="stage-wrap" aria-hidden="true">
-  <div class="stage-box">
-    <iframe id="stage-frame" title="Scratch のステージ画面" allow="autoplay" tabindex="-1"></iframe>
-    <div class="stage-head"><span id="stage-round" class="round tape"></span><span class="ttl tape">正解発表</span></div>
-    <div id="stage-q" class="stage-q"></div>
-    <div id="stage-label" class="stage-label tape">正解は…</div>
+<!-- 正解発表の前半に重ねる、予想のピンとゲージ -->
+<div id="rv" class="rv" aria-hidden="true">
+  <div class="deco dots"></div><div class="deco check"></div><div class="deco stripe"></div><div class="deco bluedots"></div>
+  <div class="rv-frame">
+    <div id="rv-q" class="rv-q"></div>
+    <div id="rv-pins" class="rv-pins"></div>
+    <div id="rv-gauge" class="rv-gauge">
+      <div class="rv-track"><div id="rv-fill" class="rv-fill"></div><div class="rv-grid"></div></div>
+      <div id="rv-tip" class="rv-tip"></div>
+      <div id="rv-ticks" class="rv-ticks"></div>
+      <div id="rv-ans" class="rv-ans"><span class="v tape"><span id="rv-num">0</span><small>%</small></span></div>
+    </div>
   </div>
 </div>
 <button id="sound" class="sound tape" type="button">🔈 クリックで音が出ます</button>
@@ -365,19 +414,24 @@
   var POLL_MS = 1000;
   var STALE_SEC = 8;
   // 正解発表は2段に分ける（battle_host.BATTLE_REVEAL_HOLD＝23秒の中に収める）。
-  //   前半: Scratch のステージ画面を重ね、ゲージが伸びて正解が出るまで（約14秒）を元の演出で見せる。
-  //         正解が出て少ししたら、下の大画面に「正解 ◯◯%」を出してから、Scratch の画面をゆっくり薄くする
+  //   前半: 大画面の上に、問題文・各部門の予想のピン・0〜100 のゲージを重ねる（reveal）。ピンが予想の小さい順に立ち、
+  //         ゲージが伸びて正解の位置で止まり、ゲージの先の数字が大きくなる。少し見せてから、ゆっくり薄くしてカードの画面に移る
   //   後半: 各カードに「−12」の札が貼られ、バルーン数が数え下がる（REVEAL_COUNT_MS）
-  //   ふだんは 正解約14秒 + 1.8 + 1.2 + 0.6 + 3 ≒ 20.6秒。正解が出たと分からないときも 16.5 + 1.2 + 0.6 + 3 ≒ 21.3秒で終わる（読み込みの遅れ最大1秒を足しても23秒に収まる）
+  //   正解が 100 のときがいちばん長く、11.7（止まる）+ 2 + 1.2 + 0.6 + 3 ≒ 18.5秒（読み込みの遅れ最大1秒を足しても23秒に収まる）
   var REVEAL_COUNT_MS = 3000;     // 後半: バルーンを数え下げる長さ
   var CHIP_LEAD_MS = 600;         // 後半: 「−12」の札を貼ってから数え下げを始めるまで
-  var STAGE_AFTER_CORRECT_MS = 1800;  // 前半: Scratch が正解を出してから、薄くし始めるまで
-  var STAGE_TIMEOUT_MS = 16500;   // 前半: 正解が出たと分からなくても、正解発表に入ってからここで薄くし始める（ふだんは約14秒で出る）
-  var PREPARE_WAIT_MS = 3000;     // 前半: Scratch が回答受付を組み立て終えるのを待つ上限（間に合わなければ後半だけ）
-  var STAGE_FADE_MS = 1200;       // 重ねた画面を薄くして消すのにかける時間（CSS の .stage-wrap と合わせる）
+  var RV_PIN_AT_MS = 600;         // 前半: 1本目のピンが立ち始める時刻（正解発表に入ってから）
+  var RV_PIN_GAP_MS = 160;        // 前半: ピンを1本ずつ立てる間隔
+  var RV_PIN_MS = 380;            // 前半: ピン1本が立ち切るまで
+  var RV_FILL_AT_MS = 3200;       // 前半: ゲージが伸び始める時刻
+  var RV_FILL_BASE_MS = 3000;     // 前半: ゲージが伸びる長さ ＝ 3秒 ＋ 正解1あたり55ミリ秒（正解 100 なら 8.5秒）
+  var RV_FILL_PER_MS = 55;
+  var RV_HOLD_MS = 2000;          // 前半: 止まってから薄くし始めるまで
+  var RV_FADE_MS = 1200;          // 前半: 重ねた画面を薄くして消す長さ（CSS の .rv と合わせる）
   // Scratch の素材（書き出したステージ画面の assets/ にある。ファイル名は中身のハッシュなので変わらない）
   var ASSET = "stage/view/assets/";
   var COUNT_SOUND = ASSET + "ade40cb278092c829377131e84f0619e.wav";  // UI の「ビープ」（元の Scratch も、風船を数え下げるたびに音程を上げて鳴らす）
+  var CORRECT_SOUND = ASSET + "3cf78e12999736a1621391b04f1a4729.wav";  // UI_オーバーレイの「正解色」（元の Scratch で正解が出るときの音）
   var COUNT_GAP_MS = 70;          // 数え下げの音を続けて鳴らす最短の間隔（10部門が一度に減っても音が団子にならないよう）
   // 回答ページ（https://suzuleague-cloud.onrender.com/furikaeri.html）の QR。docs/qr/furikaeri.svg から写した。
   // URL を変えたら docs/development.md の「QRコード」の手順で作り直し、ここも差し替える
@@ -390,7 +444,8 @@
   var countStart = null;   // 正解発表の数え下げ（後半）を始める時刻（札を貼るまでは null）
   var chipsShown = false;  // 正解発表の後半で「−12」の札を貼ったか
   var chipTimer = null;
-  var stagePhase = false;  // 正解発表の前半（Scratch の画面を重ねている）
+  var revealPhase = false; // 正解発表の前半（ピンとゲージを重ねている）
+  var openRound = null;    // 予想オープンを見た問題番号（見ていれば、正解発表の前半を頭から流す）
   var current = null;
 
   function esc(s) {
@@ -447,12 +502,13 @@
       main = '<div class="question">' + q + "</div>";
       var done = s.teams.filter(function (t) { return t.answered; }).length;
       status = "回答受付中　<b>" + done + " / " + s.teams.length + "</b> 部門が回答済み";
-    } else if (s.state === STATE.OPEN || (s.state === STATE.REVEAL && stagePhase)) {
-      // 正解発表の前半（Scratch の画面を重ねる前の待ちとフェードのあいだ）も、正解はまだ出さない
+    } else if (s.state === STATE.OPEN || (s.state === STATE.REVEAL && revealPhase)) {
+      // 正解発表の前半（ピンとゲージを重ねているあいだ）は、下の画面に正解をまだ出さない
       main = '<div class="question">' + q + "</div>";
       status = "予想オープン";
     } else if (s.state === STATE.REVEAL) {
-      main = '<div class="question small">' + q + '</div><div class="correct"><span class="tape">正解</span><b class="tape">' +
+      // 正解は、前半のゲージの先に出した黄色の札と同じ見た目で、問題文の横に残す（「正解」の札は付けない）
+      main = '<div class="question small">' + q + '</div><div class="correct"><b class="tape">' +
         s.correct + "<small>%</small></b></div>";
     } else if (s.state === STATE.ROUND_RESULT) {
       main = '<div class="headline tape">第' + s.round + "問 終了　途中順位</div>";
@@ -587,7 +643,7 @@
       });
       if (changed) sound.count(countProgress());
     }
-    stage.watch();
+    reveal.frame();
     requestAnimationFrame(tick);
   }
 
@@ -611,9 +667,8 @@
     }
     function unlock() {
       var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!ctx && Ctx) { ctx = new Ctx(); load(COUNT_SOUND); }
+      if (!ctx && Ctx) { ctx = new Ctx(); load(COUNT_SOUND); load(CORRECT_SOUND); }
       if (ctx && ctx.state === "suspended") ctx.resume();
-      stage.unlock();
       el("sound").hidden = true;
     }
     el("sound").addEventListener("click", unlock);
@@ -626,160 +681,263 @@
         lastCount = now;
         play(COUNT_SOUND, 1 + progress * 1.2);
       },
+      // 正解発表の前半：ゲージが目盛りを1つ進むたびに鳴らす（進むほど音程を上げる）。止まったら正解の音
+      gauge: function (progress) {
+        var now = performance.now();
+        if (now - lastCount < COUNT_GAP_MS) return;
+        lastCount = now;
+        play(COUNT_SOUND, .8 + progress * .9);
+      },
+      correct: function () { play(CORRECT_SOUND, 1); },
     };
   })();
 
-  // ---- Scratch のステージ画面（正解発表の前半） -------------------------------
-  // 書き出した /stage/view/ を iframe で開き、同じオリジンなので中の Scratch（vm）の変数を直接書いて動かす。
-  // クラウド変数のつながりは切る（部門対抗では裏方PCが値を送らないので、サーバに残った値で動かないように）。
-  // Scratch は1チーム分の画面なので、チーム1・風船100で「回答受付」を組み立てておき、正解発表で
-  // 予想を隠し（予想%消して）、鳥を出さず（エキシビション）、ゲージが伸びて正解が出るところだけを見せる。
-  // 高専祭の札・問題文の絵・問題番号・残り・誤差は毎コマ隠し、問題文と「正解」の札は上に重ねる。
+  // ---- 正解発表の前半：予想のピンとゲージ ----------------------------------
+  // 経過時間から毎コマ画面を決める（frame）。ピンが予想の小さい順に立つ → ゲージが伸び、正解に近づくほど遅くなる →
+  // 正解の位置で止まり、ゲージの先の数字が黄色の札になって大きくなる。正解にいちばん近い部門の名札を黄色にする →
+  // RV_HOLD_MS たったら薄くし始め、done(RV_FADE_MS) で後半（カードの画面の数え下げ）に渡す
 
-  var stage = (function () {
-    var frame = el("stage-frame"), wrap = el("stage-wrap");
-    var vm = null, seq = 0, preparedQid = null, preparedAt = 0, playing = null, unlocked = false;
-    var muteTimer = null;
+  var reveal = (function () {
+    var wrap = el("rv"), pinsEl = el("rv-pins"), gauge = el("rv-gauge");
+    var fill = el("rv-fill"), tip = el("rv-tip"), ans = el("rv-ans"), num = el("rv-num"), ansV = ans.querySelector(".v");
+    var COLORS = ["var(--red)", "var(--blue)", "var(--yellow)", "var(--ink)"];
+    var run = null;  // 流している正解発表 { correct, teams, start, fillMs, stopAt, done, lastNum, stopped }
 
-    function vars() { return vm.runtime.getTargetForStage().variables; }
-    function find(target, name) {
-      var vs = target.variables;
-      for (var id in vs) if (vs[id].name === name) return vs[id];
-      return null;
+    // 目盛り（5 ごとに線、10 ごとに数字）は一度だけ作る
+    var ticks = "";
+    for (var v = 0; v <= 100; v += 5) {
+      ticks += '<i class="' + (v % 10 ? "" : "maj") + '" style="left:' + v + '%"></i>' +
+        (v % 10 ? "" : '<b data-v="' + v + '" style="left:' + v + '%">' + v + "</b>");
     }
-    function get(name) { var v = find(vm.runtime.getTargetForStage(), name); return v ? String(v.value) : null; }
-    // 「通信」スプライトだけの変数（最後に処理した状態）
-    function seen(name) {
-      var t = vm.runtime.getSpriteTargetByName("通信"), v = t && find(t, name);
-      return v ? String(v.value) : null;
+    el("rv-ticks").innerHTML = ticks;
+    var tickLabels = Array.prototype.slice.call(document.querySelectorAll("#rv-ticks b"));
+
+    function clamp(x) { return Math.max(0, Math.min(1, x)); }
+    function guessOf(t) { return t.answer == null ? 50 : t.answer; }  // 未回答は予想50として数える（battle.UNANSWERED_GUESS）
+
+    // 名札の積み方。名札がほかの部門の棒をまたぐときは、その部門より上の段に置く（棒が名札を突き抜けないように）。
+    // 名札を棒から伸ばす向きは、境目で左右の組に分けて組ごとにそろえ、外向き・内向きの両方と全部の境目を試して、
+    // 突き抜けが残らず段がいちばん少ないものを選ぶ（予想が近い部門が多いと山の形になる）
+    function stack(xs, ws, minX, maxX, gap) {
+      var n = xs.length, idx = xs.map(function (x, i) { return i; }).sort(function (a, b) { return xs[a] - xs[b] || a - b; });
+      var pad = gap * .7, best = null;
+      for (var trial = 0; trial < 2 * (n + 1); trial++) {
+        // 境目で左右の組に分け、組ごとに名札を伸ばす向きをそろえる（外向き／内向きの両方を試す）。
+        // 画面の端で押し戻される名札だけは向きを変える
+        var pivot = trial >> 1, inward = trial & 1, lab = [];
+        idx.forEach(function (i, k) {
+          var toLeft = (k < pivot) !== !!inward;
+          var place = function (dirLeft) {
+            var raw = dirLeft ? xs[i] + pad - ws[i] : xs[i] - pad;
+            var left = Math.max(minX, Math.min(raw, maxX - ws[i]));
+            return { left: left, shift: Math.abs(left - raw) };
+          };
+          var sp = place(toLeft);
+          if (sp.shift > 0) { var other = place(!toLeft); if (other.shift < sp.shift) sp = other; }
+          lab[i] = { i: i, x: xs[i], left: sp.left, right: sp.left + ws[i], lane: -1, under: [] };
+        });
+        // 名札がほかの部門の棒をまたぐなら、その部門より上の段に置く（棒が名札を突き抜けないように）
+        lab.forEach(function (p) {
+          // 同じ予想（棒がほぼ重なる）の部門どうしは、またぐと数えない（棒が1本に見えるので、どちらが上でもよい）
+          lab.forEach(function (q) {
+            if (p !== q && Math.abs(q.x - p.x) >= pad && q.x > p.left && q.x < p.right) p.under.push(q);
+          });
+        });
+        // またぐ関係をたどる順（下に来る部門が先）に並べる。輪になったら（互いにまたぐ）、そこは突き抜けを1つ許して数える
+        var order = [], mark = [], bad = 0;
+        var visit = function (p) {
+          if (mark[p.i] === 2) return;
+          if (mark[p.i] === 1) { bad += 1; return; }
+          mark[p.i] = 1;
+          p.under.forEach(visit);
+          mark[p.i] = 2;
+          order.push(p);
+        };
+        idx.forEach(function (i) { visit(lab[i]); });
+        // 下の部門より上で、同じ段の名札と重ならないいちばん低い段に置く
+        var top = 0;
+        order.forEach(function (p) {
+          var lane = 0;
+          p.under.forEach(function (q) { if (q.lane >= 0) lane = Math.max(lane, q.lane + 1); });
+          var clash = function (l) {
+            return order.some(function (q) { return q.lane === l && q.left < p.right + gap && q.right > p.left - gap; });
+          };
+          while (clash(lane)) lane++;
+          p.lane = lane;
+          top = Math.max(top, lane);
+        });
+        var score = bad * 100 + top;
+        if (!best || score < best.score) best = { lab: lab, lanes: top + 1, bad: bad, score: score };
+      }
+      return best;
     }
-    function set(values) {
-      // サーバに残っていた値（つなぐ前に届いたもの）と同じ番号にならないよう、今の値より先へ進める
-      seq = Math.max(seq, Number(get("☁ P2S_SEQ")) || 0) + 1;
-      values["☁ P2S_SEQ"] = seq;  // 最後に書く（Scratch は SEQ の変化を見て、ほかの値を読む）
-      var stageVars = vars();
-      Object.keys(values).forEach(function (name) {
-        for (var id in stageVars) if (stageVars[id].name === name) stageVars[id].value = String(values[name]);
+
+    // ピンの名札を、問題文とゲージのあいだに収まるよう積む。段が収まらなければ名札を縮める（最小 0.55 倍）
+    function layout() {
+      if (!run || !run.teams.length) return;
+      var unit = Math.min(innerHeight / 100, innerWidth * .00625), gap = unit * 1.2, base = unit * 4;
+      var H = gauge.getBoundingClientRect().top - el("rv-q").getBoundingClientRect().bottom - unit * 2;
+      pinsEl.style.height = Math.max(0, H) + "px";
+      var W = pinsEl.clientWidth, minX = -innerWidth * .05, maxX = W + innerWidth * .05;
+      var xs = run.teams.map(function (t) { return t.guess / 100 * W; });
+      var scale = 1, res, labH;
+      // 段が収まらないか、突き抜けが残るときは名札を縮めて積み直す
+      for (var tries = 0; tries < 8; tries++) {
+        pinsEl.style.setProperty("--ps", scale);
+        var ws = run.teams.map(function (t, i) { return pinsEl.children[i].querySelector(".lab").offsetWidth; });
+        labH = pinsEl.children[0].querySelector(".lab").offsetHeight;
+        res = stack(xs, ws, minX, maxX, gap);
+        // 段の間隔（unit）と土台（base）は縮まないので、それを除いた分の比で縮める
+        var fixed = base + (res.lanes - 1) * unit, need = fixed + res.lanes * labH;
+        if ((need <= H && !res.bad) || scale <= .55 || tries === 7) break;
+        scale = Math.max(.55, scale * (need > H ? Math.max(0, H - fixed) / (need - fixed) * .98 : .85));
+      }
+      var step = Math.min(labH + unit * 1.2, (H - base - labH) / Math.max(1, res.lanes - 1));
+      res.lab.forEach(function (p) {
+        var node = pinsEl.children[p.i], lift = base + p.lane * step;
+        node.querySelector(".lab").style.left = (p.left - p.x) + "px";
+        node.querySelector(".lab").style.bottom = lift + "px";
+        node.querySelector(".stem").style.height = lift + "px";
       });
     }
-    function volume(on) {
-      var engine = vm && vm.runtime.audioEngine;
-      if (engine && engine.inputNode) engine.inputNode.gain.value = on ? 1 : 0;
-    }
-    function hideFestivalParts() {
-      vm.runtime.targets.forEach(function (t) {
-        if (t.isStage || !t.visible) return;
-        var name = t.sprite.name, costume = t.getCostumes()[t.currentCostume].name;
-        if (name === "問題" || name === "問題数" || name === "予想" || name === "UI_結果演出" || name === "GameOver" ||
-            (name === "UI" && costume !== "風船" && costume !== "カゴ") ||   // チームの札・残り・誤差・エキシビションの表示
-            (name === "UI_オーバーレイ" && costume.indexOf("問題枠") === 0) ||
-            (name === "数字" && t.x > 120)) {                                 // 右側の数字（残り・誤差）。正解は真ん中に出る
-          t.setVisible(false);
-        }
-      });
-    }
-    function attach() {
-      var win = frame.contentWindow, doc = frame.contentDocument;
-      var launch = doc && doc.getElementById("launch");
-      // 読み込みが終わると、Packager は「クリックで開始」の画面を出す
-      if (!win || !win.vm || !launch || launch.hidden) return false;
-      vm = win.vm;
-      var style = doc.createElement("style");
-      style.textContent = ".standalone-fullscreen-button, #launch { display: none !important; }";
-      doc.head.appendChild(style);
-      var vs = vars();
-      for (var id in vs) if (vs[id].name.indexOf("☁ ") === 0) vs[id].isCloud = false;
-      vm.runtime.on("AFTER_EXECUTE", hideFestivalParts);  // 描く直前に毎コマ隠す（スクリプトが出し直しても負けない）
-      volume(false);
-      launch.click();  // 緑の旗
-      if (unlocked) resume();
-      return true;
-    }
-    function resume() {
-      var engine = vm && vm.runtime.audioEngine;
-      if (engine && engine.audioContext && engine.audioContext.state === "suspended") engine.audioContext.resume();
-    }
-    // 回答受付の組み立てを Scratch が終えたか（終える前に正解発表を書くと、演出を飛ばして作り直してしまう）
-    function built(qid) {
-      // 回答中 は作り直しの終わり近くで 1 になる（前の問題の正解発表のあとは 3 か 4）。
-      // 作り直しの始めの「待つ」のあいだは 見た〜 だけが新しいので、頼んでから少したつまでは見ない
-      return performance.now() - preparedAt >= 300 && get("回答中") === "1" && seen("見たSTATE") === "3" && seen("見たQID") === String(qid) && get("復帰描画中") === "0" &&
-        get("途中復帰") === "0" && get("☁ P2S_SEQ") === seen("見たSEQ");
-    }
-    function begin(s) {
-      preparedQid = null;  // 1回流したら使い切り（途中で開き直したように見えても、同じ問題で Scratch を待ち直さない）
-      set({ "予想%消して": 1, "エキシビション": 1, "☁ P2S_CORRECT": s.correct, "☁ P2S_STATE": 4 });
-      el("stage-round").textContent = "第" + s.round + "問";
-      el("stage-q").textContent = s.question.text;
-      el("stage-label").textContent = "正解は…";
-      clearTimeout(muteTimer);
-      volume(true);
-      wrap.classList.add("on");
-      playing.start = performance.now();
+
+    // ゲージの値（0〜正解）。前半は速く、正解に近づくほど遅くなる
+    function fillAt(t) {
+      var p = clamp((t - RV_FILL_AT_MS) / run.fillMs);
+      return run.correct * (1 - Math.pow(1 - p, 2.2));
     }
 
-    var tries = 0, poller = setInterval(function () {
-      tries += 1;
-      try { if (attach()) clearInterval(poller); } catch (e) { /* まだ読み込み中 */ }
-      if (tries > 120) clearInterval(poller);  // 1分たっても読めなければあきらめる（後半だけで進む）
-    }, 500);
-    frame.src = "stage/view/";
+    function draw(t) {
+      var stopped = t >= run.stopAt;
+      run.teams.forEach(function (tm, i) {
+        var node = pinsEl.children[i], p = clamp((t - RV_PIN_AT_MS - tm.order * RV_PIN_GAP_MS) / RV_PIN_MS);
+        node.style.visibility = p > 0 ? "visible" : "hidden";
+        var lab = node.querySelector(".lab");
+        lab.style.transform = "translateY(" + (-(1 - p) * (1 - p) * 6) + "vh)";
+        lab.style.opacity = clamp(p * 2);
+        node.querySelector(".stem").style.transform = "scaleY(" + p + ")";
+        node.querySelector(".dot").style.transform = "scale(" + clamp(p * 1.5) + ")";
+        node.classList.toggle("near", stopped && tm.near && t >= run.stopAt + 300);
+      });
+      var f = stopped ? run.correct : fillAt(t), filling = t >= RV_FILL_AT_MS;
+      fill.style.width = f + "%";
+      tip.style.left = f + "%";
+      tip.style.opacity = filling ? 1 : 0;
+      ans.style.left = f + "%";
+      ans.style.opacity = filling ? 1 : 0;
+      var shown = stopped ? run.correct : Math.floor(f + 1e-6);
+      num.textContent = shown;
+      ans.classList.toggle("done", stopped);
+      // 止まったら 0.45 秒で 2.7 倍まで弾んで大きくなる
+      var ps = clamp((t - run.stopAt) / 450);
+      var sc = stopped ? 1 + 1.7 * (ps < .6 ? ps / .6 * 1.15 : 1.15 - (ps - .6) / .4 * .15) : 1;
+      ans.style.transform = "scale(" + sc + ") rotate(" + (stopped ? -3 * ps : 0) + "deg)";
+      // 札が画面の外にはみ出さないよう、端では札だけを内側へずらす（三角はゲージの先に残す）
+      ansV.style.marginLeft = "0px";
+      var r = ansV.getBoundingClientRect(), edge = innerWidth * .015, shift = 0;
+      if (r.left < edge) shift = (edge - r.left) / sc;
+      else if (r.right > innerWidth - edge) shift = (innerWidth - edge - r.right) / sc;
+      ansV.style.marginLeft = shift + "px";
+      // ゲージの先に近い目盛りの数字は、札に隠れるので消す
+      tickLabels.forEach(function (b) {
+        b.style.opacity = filling && Math.abs(+b.dataset.v - f) < (stopped ? 9 : 4) ? 0 : 1;
+      });
+      if (filling && !stopped && shown !== run.lastNum) sound.gauge(f / 100);
+      if (stopped && !run.stopped) sound.correct();
+      run.lastNum = shown;
+      run.stopped = stopped;
+    }
+
+    // 後半へ移る。重ねた画面を薄くしながら、正解の札をカードの画面の上の正解の札の位置へ飛ばす
+    var leaveTimer = null, leaveTimer2 = null;
+    function leave() {
+      clearTimeout(leaveTimer);
+      clearTimeout(leaveTimer2);
+      var target = document.querySelector("#main .correct b");
+      var from = ansV.getBoundingClientRect();
+      wrap.classList.add("leaving");
+      if (target && from.width) {
+        target.parentNode.style.animation = "none";  // 札が飛んでくるので、カードの画面の正解は弾ませない（弾む途中だと位置を測り違える）
+        var fly = document.createElement("div");
+        fly.className = "correct rv-fly";
+        fly.innerHTML = target.outerHTML;
+        var to = target.getBoundingClientRect();
+        fly.style.left = to.left + "px";
+        fly.style.top = to.top + "px";
+        document.body.appendChild(fly);
+        // 札は少し傾いているので、外接の四角どうしがそろうよう置き直す（着地して入れ替わるときに跳ねないように）
+        var landed = fly.querySelector("b").getBoundingClientRect();  // 傾いているのは中の札
+        fly.style.left = (2 * to.left - landed.left) + "px";
+        fly.style.top = (2 * to.top - landed.top) + "px";
+        var k = from.width / to.width;
+        fly.style.transform = "translate(" + (from.left - to.left) + "px," + (from.top - to.top) + "px) scale(" + k + ")";
+        target.style.visibility = "hidden";
+        void fly.offsetWidth;  // 始めの位置を確定させてから動かす
+        fly.style.transform = "none";
+        leaveTimer = setTimeout(function () {
+          target.style.visibility = "";
+          fly.remove();
+        }, RV_FADE_MS);
+      }
+      leaveTimer2 = setTimeout(function () { if (!run) wrap.classList.remove("on"); }, RV_FADE_MS);
+    }
 
     return {
-      unlock: function () { unlocked = true; resume(); },
-      // 回答受付・予想オープンのあいだに、その問題の「回答受付」を組み立てておく（2〜3秒かかる）
-      prepare: function (s) {
-        if (!vm || !s.question || preparedQid === s.question.id) return;
-        preparedQid = s.question.id;
-        preparedAt = performance.now();
-        set({
-          "☁ P2S_STATE": 3, "☁ P2S_TEAM": 1, "☁ P2S_ROUND": ((s.round - 1) % 4) + 1,  // 5問目はクリアの演出が混ざるので使わない
-          "☁ P2S_QID": s.question.id, "☁ P2S_BALLOONS": 100, "☁ P2S_ANSWER": -1, "☁ P2S_CORRECT": -1,
-          "☁ P2S_FAILED_ROUND": 0,
-        });
-      },
-      // 正解発表を流せるか（組み立てを頼まずに正解発表を開いたときは流さない）
-      ready: function (s) { return !!vm && !!s.question && preparedQid === s.question.id; },
-      // 組み立てが終わっていなければ少し待ってから始める（PREPARE_WAIT_MS で間に合わなければ後半へ）
+      // 正解発表を頭から流す。終わったら done(薄くする時間) を呼ぶ
       play: function (s, done) {
-        playing = { s: s, asked: performance.now(), start: null, shown: null, done: done };
-        if (built(s.question.id)) begin(s);
+        var teams = s.teams.map(function (t, i) {
+          return { name: t.name, guess: guessOf(t), na: t.answer == null, out: t.eliminated && !(t.damage > 0), c: COLORS[i % COLORS.length] };
+        });
+        var errs = teams.filter(function (t) { return !t.out; }).map(function (t) { return Math.abs(t.guess - s.correct); });
+        var best = errs.length ? Math.min.apply(null, errs) : -1;
+        teams.forEach(function (t) { t.near = !t.out && Math.abs(t.guess - s.correct) === best; });
+        teams.map(function (t, i) { return i; }).sort(function (a, b) { return teams[a].guess - teams[b].guess || a - b; })
+          .forEach(function (i, k) { teams[i].order = k; });
+        var fillMs = RV_FILL_BASE_MS + RV_FILL_PER_MS * s.correct;
+        run = { correct: s.correct, teams: teams, start: performance.now(), fillMs: fillMs, stopAt: RV_FILL_AT_MS + fillMs,
+          done: done, lastNum: null, stopped: false };
+        el("rv-q").textContent = s.question.text;
+        pinsEl.innerHTML = teams.map(function (t) {
+          return '<div class="rv-pin' + (t.out ? " out" : "") + '" style="--c:' + t.c + ";left:" + t.guess + '%">' +
+            '<i class="stem"></i><i class="dot"></i><div class="lab"><span>' + esc(t.name) + '</span><b' + (t.na ? ' class="na"' : "") + ">" +
+            t.guess + "</b></div></div>";
+        }).join("");
+        wrap.classList.remove("leaving");
+        layout();
+        draw(0);
+        wrap.classList.add("on");
       },
-      // tick から毎コマ呼ぶ。正解が出たら（回答中 が 3 になる）少し見せてから、ゆっくり薄くして大画面に戻る
-      watch: function () {
-        if (!playing) return;
-        var now = performance.now(), finish = false;
-        if (playing.start === null) {
-          if (built(playing.s.question.id)) begin(playing.s);
-          else if (now - playing.asked >= PREPARE_WAIT_MS) finish = true;
-        } else {
-          if (playing.shown === null && get("回答中") === "3") {
-            playing.shown = now;
-            el("stage-label").textContent = "正解 ▶";
-          }
-          finish = (playing.shown !== null && now - playing.shown >= STAGE_AFTER_CORRECT_MS) ||
-            now - playing.asked >= STAGE_TIMEOUT_MS;
-        }
-        if (finish) {
-          // 下の大画面を先に「正解 ◯◯%」の画面にしてから薄くする（薄くなるにつれて、正解の札が残って見える）
-          var done = playing.done, shownStage = playing.start !== null;
-          this.stop();
-          done(shownStage ? STAGE_FADE_MS : 0);
+      // tick から毎コマ呼ぶ
+      frame: function () {
+        if (!run) return;
+        var t = performance.now() - run.start;
+        draw(t);
+        if (t >= run.stopAt + RV_HOLD_MS) {
+          var done = run.done;
+          run = null;
+          done(RV_FADE_MS);  // 下の画面を、上に正解の出たカードの画面にしておく
+          leave();
         }
       },
+      // 途中でやめる（送り直し・モードの切り替え）。薄くして消すだけ
       stop: function () {
-        playing = null;
-        wrap.classList.remove("on");
-        clearTimeout(muteTimer);
-        muteTimer = setTimeout(function () { volume(false); }, STAGE_FADE_MS);
+        run = null;
+        clearTimeout(leaveTimer);
+        clearTimeout(leaveTimer2);
+        wrap.classList.remove("on");  // leaving は残す（外すと、薄くした地と部品が一瞬戻ってちらつく）。次の play で外す
+        document.querySelectorAll(".rv-fly").forEach(function (fly) { fly.remove(); });
+        var hidden = document.querySelector("#main .correct b");
+        if (hidden) hidden.style.visibility = "";
       },
+      relayout: layout,
     };
   })();
+  window.addEventListener("resize", function () { reveal.relayout(); });
 
   // 正解発表の後半：上に正解を出し、重ねた画面が消えるのを待って（wait ミリ秒）札を貼り、数え下げを始める
   function startCount(wait) {
     var s = current;
-    stagePhase = false;
+    revealPhase = false;
     if (!s || s.state !== STATE.REVEAL) return;
     renderTop(s);
     renderGrid(s);
@@ -794,7 +952,7 @@
 
   function render(s) {
     if (!s || s.mode !== "battle") {
-      if (stagePhase) { stagePhase = false; stage.stop(); }
+      revealPhase = false; reveal.stop(); openRound = null;
       current = null; lastKey = null; render.sig = null;
     }
     if (!s) { el("grid").innerHTML = ""; el("main").innerHTML = '<div class="question small">まもなく始まります</div>'; return; }
@@ -809,16 +967,20 @@
     var fresh = key !== lastKey;
     current = s;
     lastKey = key;
-    if (s.state === STATE.ANSWERING || s.state === STATE.OPEN) stage.prepare(s);
+    if (s.state === STATE.OPEN) openRound = s.round;
+    else if (s.state === STATE.IDLE) openRound = null;
     if (fresh) {
       countStart = null; chipsShown = false; clearTimeout(chipTimer);
-      if (stagePhase) { stagePhase = false; stage.stop(); }  // 前半の途中で進んだ（開き直し・送り直し）
+      // 前半か、後半へ移るフェードの途中で進んだ（送り直し）。重ねた画面と飛んでいる札を片付ける
+      revealPhase = false; reveal.stop();
       if (s.state === STATE.REVEAL) {
-        if (stage.ready(s)) {
-          stagePhase = true;  // 大画面は発表前の数のまま、上に Scratch の画面を重ねる。終わったら startCount
-          stage.play(s, startCount);
+        if (openRound === s.round && s.question && s.correct != null) {
+          // 予想オープンから続けて見ている。大画面は発表前の数のまま、上にピンとゲージを重ねる。終わったら startCount
+          revealPhase = true;
+          openRound = null;  // 1回流したら使い切り（同じ問題の正解発表に後から入り直しても、頭からは流さない）
+          reveal.play(s, startCount);
         } else {
-          startCount(0);  // Scratch の画面がない・間に合わないときは、すぐ後半へ
+          startCount(0);  // 正解発表の途中で開いた（開き直した）ときは、頭から流さずにすぐ後半へ
           render.sig = sig;
           return;
         }
